@@ -1,0 +1,16 @@
+/.dotnet/
+/models/
+/publish/
+/publish - 복사본/
+
+src/**/bin/
+src/**/obj/
+
+release/*.tar
+release/*.tar.gz
+release/*.part*
+!release/README-ko.txt
+
+*.user
+*.suo
+*.log

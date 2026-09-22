@@ -1,0 +1,66 @@
+namespace ProcessVideoAnalyzer.Bridge;
+
+public static class WebMessageTypes
+{
+    public const string OpenVideo = "openVideo";
+    public const string AnalyzeVideo = "analyzeVideo";
+    public const string CancelAnalysis = "cancelAnalysis";
+    public const string UpdateSegment = "updateSegment";
+    public const string MergeSegments = "mergeSegments";
+    public const string SplitSegment = "splitSegment";
+    public const string RestoreOriginalSegment = "restoreOriginalSegment";
+    public const string UndoSegmentEdit = "undoSegmentEdit";
+    public const string RedoSegmentEdit = "redoSegmentEdit";
+    public const string ReAnalyzeSegment = "reAnalyzeSegment";
+    public const string GetApiSettingsStatus = "getApiSettingsStatus";
+    public const string SaveApiSettings = "saveApiSettings";
+    public const string TestApiKey = "testApiKey";
+    public const string GetLocalAiSettings = "getLocalAiSettings";
+    public const string SaveLocalAiSettings = "saveLocalAiSettings";
+    public const string GetVlmModels = "getVlmModels";
+    public const string AddVlmModel = "addVlmModel";
+    public const string UpdateVlmModel = "updateVlmModel";
+    public const string RemoveVlmModel = "removeVlmModel";
+    public const string SetDefaultVlmModel = "setDefaultVlmModel";
+    public const string LoadVlmModel = "loadVlmModel";
+    public const string UnloadVlmModel = "unloadVlmModel";
+    public const string WarmupVlmModel = "warmupVlmModel";
+    public const string TestVlmModel = "testVlmModel";
+    public const string GetVlmStatus = "getVlmStatus";
+    public const string AnalyzeSegmentLocal = "analyzeSegmentLocal";
+    public const string GetPerformanceMetrics = "getPerformanceMetrics";
+    public const string RunBenchmark = "runBenchmark";
+    public const string ExportPerformanceCsv = "exportPerformanceCsv";
+    public const string ExportResult = "exportResult";
+    public const string GetAnalysisHistory = "getAnalysisHistory";
+    public const string LoadAnalysisHistory = "loadAnalysisHistory";
+    public const string DeleteAnalysisHistory = "deleteAnalysisHistory";
+    public const string StartCapturePreview = "startCapturePreview";
+    public const string StopCapturePreview = "stopCapturePreview";
+    public const string StartCaptureRecording = "startCaptureRecording";
+    public const string StopCaptureRecording = "stopCaptureRecording";
+    public const string CaptureSnapshot = "captureSnapshot";
+    public const string LoadImageForAnalysis = "loadImageForAnalysis";
+    public const string GetCaptureStatus = "getCaptureStatus";
+
+    public const string VideoLoaded = "videoLoaded";
+    public const string ImageLoaded = "imageLoaded";
+    public const string AnalysisStarted = "analysisStarted";
+    public const string AnalysisProgress = "analysisProgress";
+    public const string MotionData = "motionData";
+    public const string SegmentsUpdated = "segmentsUpdated";
+    public const string AnalysisComplete = "analysisComplete";
+    public const string ApiSettingsStatus = "apiSettingsStatus";
+    public const string ApiKeyTestResult = "apiKeyTestResult";
+    public const string ApiLimitExceeded = "apiLimitExceeded";
+    public const string LocalAiSettings = "localAiSettings";
+    public const string VlmModels = "vlmModels";
+    public const string VlmStatus = "vlmStatus";
+    public const string VlmModelTestResult = "vlmModelTestResult";
+    public const string PerformanceMetrics = "performanceMetrics";
+    public const string AnalysisHistoryUpdated = "analysisHistoryUpdated";
+    public const string AnalysisHistoryLoaded = "analysisHistoryLoaded";
+    public const string CaptureStatus = "captureStatus";
+    public const string CapturePreview = "capturePreview";
+    public const string Error = "error";
+}
