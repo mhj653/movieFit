@@ -39,7 +39,28 @@
   performanceMetrics: null,
   analysisStartedAtMs: null,
   mediaType: "video",
-  imageUrl: ""
+  imageUrl: "",
+  context: {
+    imageUrl: "",
+    imageName: "",
+    source: "image",
+    segmentId: "",
+    candidates: defaultContextCandidates("image"),
+    blockSettings: defaultAdvancedBlockSettings(),
+    advancedPresets: [],
+    activeAdvancedPresetId: "none",
+    advancedTestSource: "advancedImage",
+    advancedTestImageUrl: "",
+    advancedRoiDragging: false,
+    advancedRoiStart: null,
+    presetPickerCandidateIndex: null,
+    running: false,
+    runs: [],
+    history: [],
+    recommendation: null,
+    traceRun: null,
+    traceTab: "prompt"
+  }
 };
 
 const el = {
@@ -133,7 +154,48 @@ const el = {
   captureStatusText: document.getElementById("captureStatusText"),
   captureRecordingPath: document.getElementById("captureRecordingPath"),
   openVideoTabBtn: document.getElementById("openVideoTabBtn"),
-  tabVideo: document.getElementById("tabVideo")
+  tabVideo: document.getElementById("tabVideo"),
+  tabAdvanced: document.getElementById("tabAdvanced"),
+  contextImage: document.getElementById("contextImage"),
+  contextImageName: document.getElementById("contextImageName"),
+  contextLoadImageBtn: document.getElementById("contextLoadImageBtn"),
+  contextUseSegmentBtn: document.getElementById("contextUseSegmentBtn"),
+  contextRunCompareBtn: document.getElementById("contextRunCompareBtn"),
+  contextStatus: document.getElementById("contextStatus"),
+  contextCandidateSetup: document.getElementById("contextCandidateSetup"),
+  contextRows: document.getElementById("contextRows"),
+  contextRecommendation: document.getElementById("contextRecommendation"),
+  contextHistory: document.getElementById("contextHistory"),
+  contextApplyBestBtn: document.getElementById("contextApplyBestBtn"),
+  contextTraceDialog: document.getElementById("contextTraceDialog"),
+  contextTraceTitle: document.getElementById("contextTraceTitle"),
+  contextTraceFrames: document.getElementById("contextTraceFrames"),
+  contextTraceText: document.getElementById("contextTraceText"),
+  advancedPresetPickerDialog: document.getElementById("advancedPresetPickerDialog"),
+  presetPickerTitle: document.getElementById("presetPickerTitle"),
+  presetPickerSelect: document.getElementById("presetPickerSelect"),
+  presetPickerSummary: document.getElementById("presetPickerSummary"),
+  editPresetInAdvancedBtn: document.getElementById("editPresetInAdvancedBtn"),
+  applyPresetToCandidateBtn: document.getElementById("applyPresetToCandidateBtn"),
+  advPresetSelect: document.getElementById("advPresetSelect"),
+  advPresetName: document.getElementById("advPresetName"),
+  advPresetNewBtn: document.getElementById("advPresetNewBtn"),
+  advPresetDuplicateBtn: document.getElementById("advPresetDuplicateBtn"),
+  advPresetSaveBtn: document.getElementById("advPresetSaveBtn"),
+  advPresetDeleteBtn: document.getElementById("advPresetDeleteBtn"),
+  advancedRoiStage: document.getElementById("advancedRoiStage"),
+  advancedRoiImage: document.getElementById("advancedRoiImage"),
+  advancedRoiBox: document.getElementById("advancedRoiBox"),
+  advancedLoadTestImageBtn: document.getElementById("advancedLoadTestImageBtn"),
+  advancedUseContextImageBtn: document.getElementById("advancedUseContextImageBtn"),
+  advancedUseSelectedSegmentBtn: document.getElementById("advancedUseSelectedSegmentBtn"),
+  advancedRunBlockTestBtn: document.getElementById("advancedRunBlockTestBtn"),
+  advancedSourceImage: document.getElementById("advancedSourceImage"),
+  advancedProcessedImage: document.getElementById("advancedProcessedImage"),
+  advancedTestStatus: document.getElementById("advancedTestStatus"),
+  advancedTestHints: document.getElementById("advancedTestHints"),
+  advancedApplyToCandidatesBtn: document.getElementById("advancedApplyToCandidatesBtn"),
+  advancedResetBtn: document.getElementById("advancedResetBtn")
 };
 
 wireUi();
@@ -146,6 +208,8 @@ post("getAnalysisHistory");
 post("getLocalAiSettings");
 post("getVlmStatus");
 post("getCaptureStatus");
+post("getVlmContextExperiments");
+post("getAdvancedBlockPresets");
 setInterval(() => post("getCaptureStatus"), 750);
 
 function wireUi() {
@@ -195,6 +259,29 @@ function wireUi() {
       el.tabVideo.checked = true;
     }
   });
+  el.contextLoadImageBtn?.addEventListener("click", () => post("loadVlmContextImage"));
+  el.contextUseSegmentBtn?.addEventListener("click", useSelectedSegmentForContext);
+  el.contextRunCompareBtn?.addEventListener("click", () => {
+    state.context.running = true;
+    renderContextLab();
+    post("runVlmContextCompare", {
+      ...collectAnalysisDefaults(),
+      source: state.context.source || "image",
+      segmentId: state.context.segmentId || "",
+      candidates: collectContextCandidates(),
+      blockSettings: collectAdvancedBlockSettings()
+    });
+  });
+  el.contextApplyBestBtn?.addEventListener("click", () => {
+    const run = currentContextBestRun();
+    if (!run?.id) {
+      showToast("Select Best first");
+      return;
+    }
+
+    post("applyVlmContextBestToDefaults", { runId: run.id });
+    showToast("Applying Best settings to Analysis defaults");
+  });
 
   document.querySelectorAll(".scale-btn").forEach((button) => {
     button.addEventListener("click", () => {
@@ -241,6 +328,37 @@ function wireUi() {
   document.querySelectorAll(".trace-tab").forEach((button) => {
     button.addEventListener("click", () => setTraceTab(button.dataset.traceTab || "schema"));
   });
+  document.querySelectorAll(".context-trace-tab").forEach((button) => {
+    button.addEventListener("click", () => setContextTraceTab(button.dataset.contextTraceTab || "prompt"));
+  });
+  el.advancedApplyToCandidatesBtn?.addEventListener("click", () => {
+    applyAdvancedToCandidates();
+    if (!event.silent) {
+      renderContextCandidateSetup();
+    }
+    showToast("Advanced block settings applied to Compare Setup");
+  });
+  el.advancedResetBtn?.addEventListener("click", () => {
+    state.context.blockSettings = defaultAdvancedBlockSettings();
+    fillAdvancedBlockSettings();
+    renderAdvancedPresetSelect();
+    showToast("Advanced block settings reset");
+  });
+  el.advPresetSelect?.addEventListener("change", () => selectAdvancedPreset(el.advPresetSelect.value));
+  el.advPresetNewBtn?.addEventListener("click", newAdvancedPreset);
+  el.advPresetDuplicateBtn?.addEventListener("click", duplicateAdvancedPreset);
+  el.advPresetSaveBtn?.addEventListener("click", saveAdvancedPreset);
+  el.advPresetDeleteBtn?.addEventListener("click", deleteAdvancedPreset);
+  el.advancedLoadTestImageBtn?.addEventListener("click", () => post("loadAdvancedBlockTestImage"));
+  el.advancedUseContextImageBtn?.addEventListener("click", () => setAdvancedTestSource("contextImage"));
+  el.advancedUseSelectedSegmentBtn?.addEventListener("click", () => setAdvancedTestSource("selectedSegment"));
+  el.advancedRunBlockTestBtn?.addEventListener("click", runAdvancedBlockTest);
+  el.advancedRoiImage?.addEventListener("load", renderAdvancedRoiBox);
+  el.presetPickerSelect?.addEventListener("change", renderAdvancedPresetPickerSummary);
+  el.applyPresetToCandidateBtn?.addEventListener("click", applyPickerPresetToCandidate);
+  el.editPresetInAdvancedBtn?.addEventListener("click", editPickerPresetInAdvanced);
+  wireAdvancedRoiPicker();
+  fillAdvancedBlockSettings();
 }
 
 function wireHost() {
@@ -348,11 +466,900 @@ function wireHost() {
       case "captureStatus":
         renderCaptureStatus(data);
         break;
+      case "vlmContextImageLoaded":
+        state.context.imageUrl = data.imageUrl || "";
+        state.context.imageName = data.fileName || "Loaded image";
+        state.context.source = "image";
+        state.context.segmentId = "";
+        state.context.candidates = defaultContextCandidates("image");
+        state.context.runs = [];
+        state.context.running = false;
+        renderContextLab();
+        break;
+      case "vlmContextCompareStarted":
+        state.context.running = true;
+        state.context.runs = [];
+        if (el.contextStatus) el.contextStatus.textContent = "Auto compare running...";
+        renderContextLab();
+        break;
+      case "vlmContextCompareProgress":
+        if (el.contextStatus) el.contextStatus.textContent = data.message || "Running...";
+        break;
+      case "vlmContextCompareComplete":
+        state.context.running = false;
+        state.context.runs = data.runs ?? [];
+        state.context.recommendation = data.recommendation ?? state.context.recommendation;
+        renderContextLab();
+        showToast("VLM Context compare complete");
+        break;
+      case "vlmContextExperimentsUpdated":
+        state.context.history = data.runs ?? [];
+        state.context.recommendation = data.recommendation ?? null;
+        reconcileContextBestFlags();
+        renderContextLab();
+        break;
+      case "advancedBlockPresetsUpdated":
+        state.context.advancedPresets = data.presets ?? [];
+        if (!state.context.advancedPresets.length) {
+          state.context.advancedPresets = [{ id: "none", name: "None", settings: defaultAdvancedBlockSettings() }];
+        }
+        if (!state.context.advancedPresets.some((preset) => preset.id === state.context.activeAdvancedPresetId)) {
+          state.context.activeAdvancedPresetId = state.context.advancedPresets[0]?.id || "none";
+        }
+        selectAdvancedPreset(state.context.activeAdvancedPresetId, true);
+        renderAdvancedPresetSelect();
+        renderContextCandidateSetup();
+        break;
+      case "advancedBlockTestImageLoaded":
+        state.context.advancedTestSource = data.source || "advancedImage";
+        state.context.advancedTestImageUrl = data.imageUrl || "";
+        setAdvancedPreviewImage(data.imageUrl || "");
+        if (el.advancedTestStatus) el.advancedTestStatus.textContent = `${data.fileName || "Image"} loaded for block test.`;
+        break;
+      case "advancedBlockTestComplete":
+        setAdvancedPreviewImage(data.sourceUrl || state.context.advancedTestImageUrl || "");
+        if (el.advancedProcessedImage) el.advancedProcessedImage.src = data.processedUrl ? `${data.processedUrl}?t=${Date.now()}` : "";
+        if (el.advancedTestHints) el.advancedTestHints.textContent = data.hints || "No hints.";
+        if (el.advancedTestStatus) {
+          el.advancedTestStatus.textContent = `Processed ${data.sourceWidth || "-"}x${data.sourceHeight || "-"} -> ${data.outputWidth || "-"}x${data.outputHeight || "-"} · ${formatMs(data.latencyMs)}`;
+        }
+        break;
       case "error":
         showToast(data.message || "Error");
         break;
     }
   });
+}
+
+function useSelectedSegmentForContext() {
+  const segment = selectedSegment();
+  if (!segment) {
+    showToast("Select a segment in Analysis first");
+    return;
+  }
+
+  state.context.source = "selectedSegment";
+  state.context.segmentId = segment.id;
+  state.context.candidates = defaultContextCandidates("segment");
+  state.context.imageUrl = segment.thumbnailUrl || segment.frameUrls?.[0] || "";
+  state.context.imageName = `Segment ${segment.sequence ?? "-"} · ${fmt(segment.startTime)}-${fmt(segment.endTime)}s`;
+  state.context.runs = [];
+  renderContextLab();
+}
+
+function defaultContextCandidates(kind = "image") {
+  const segmentMode = kind === "segment";
+  return [
+    {
+      id: "fast",
+      name: "Fast",
+      enabled: true,
+      advancedPresetId: "none",
+      advancedPresetName: "None",
+      blockSettings: null,
+      imageLongEdge: 512,
+      frameCount: 1,
+      samplingMode: "middle",
+      motionSummary: false,
+      yoloHints: false,
+      ocrHints: false,
+      roiMode: "fullFrame",
+      cropMode: "fullFrame",
+      yoloConfidence: 0.45,
+      targetLabels: "worker,hand,part,tool,machine",
+      promptMode: "fast",
+      maxOutputTokens: 80,
+      description: segmentMode ? "One segment frame for quickest feedback." : "One image, shortest prompt."
+    },
+    {
+      id: "balanced",
+      name: "Balanced",
+      enabled: true,
+      advancedPresetId: "none",
+      advancedPresetName: "None",
+      blockSettings: null,
+      imageLongEdge: 768,
+      frameCount: segmentMode ? 3 : 1,
+      samplingMode: "uniform",
+      motionSummary: true,
+      yoloHints: false,
+      ocrHints: false,
+      roiMode: "fullFrame",
+      cropMode: "roiContext",
+      yoloConfidence: 0.45,
+      targetLabels: "worker,hand,part,fixture,button,tool,machine",
+      promptMode: "description",
+      maxOutputTokens: 120,
+      description: segmentMode ? "Time sequence with motion hints." : "Balanced detail with context hints."
+    },
+    {
+      id: "accurate",
+      name: "Accurate",
+      enabled: true,
+      advancedPresetId: "none",
+      advancedPresetName: "None",
+      blockSettings: null,
+      imageLongEdge: 896,
+      frameCount: segmentMode ? 5 : 1,
+      samplingMode: "uniform",
+      motionSummary: true,
+      yoloHints: false,
+      ocrHints: false,
+      roiMode: "fullFrame",
+      cropMode: "roiContext",
+      yoloConfidence: 0.45,
+      targetLabels: "worker,hand,part,fixture,button,tool,machine,text,label",
+      promptMode: "description",
+      maxOutputTokens: 160,
+      description: segmentMode ? "More frames for temporal context." : "Larger image and longer output."
+    }
+  ];
+}
+
+function defaultAdvancedBlockSettings() {
+  return {
+    yoloEnabled: false,
+    yoloModelPath: "",
+    yoloRuntime: "onnxruntime",
+    yoloDevice: "cpu",
+    yoloInputSize: 640,
+    yoloConfidence: 0.45,
+    yoloIou: 0.5,
+    yoloLabels: "worker,hand,part,fixture,button,tool,machine",
+    yoloUseBoxesAsRoi: false,
+    yoloDrawOverlay: false,
+    roiMode: "fullFrame",
+    roiX: 0,
+    roiY: 0,
+    roiWidth: 0,
+    roiHeight: 0,
+    roiPadding: 0.12,
+    cropMode: "fullFrame",
+    cropPadding: 0.12,
+    cropKeepAspect: true,
+    cropOutputLongEdge: 768,
+    ocrEnabled: false,
+    ocrEngine: "future",
+    ocrLanguage: "ko",
+    ocrUseTextAsHint: true,
+    samplingMode: "uniform",
+    samplingFrameCount: 3,
+    samplingIncludeTimestamp: true,
+    samplingMotionPeakWindowSec: 0.25
+  };
+}
+
+function fillAdvancedBlockSettings() {
+  const s = state.context.blockSettings ?? defaultAdvancedBlockSettings();
+  setChecked("advYoloEnabled", s.yoloEnabled);
+  setInputValue("advYoloModelPath", s.yoloModelPath);
+  setSelectValue("advYoloRuntime", s.yoloRuntime);
+  setSelectValue("advYoloDevice", s.yoloDevice);
+  setSelectValue("advYoloInputSize", String(s.yoloInputSize));
+  setInputValue("advYoloConfidence", s.yoloConfidence);
+  setInputValue("advYoloIou", s.yoloIou);
+  setInputValue("advYoloLabels", s.yoloLabels);
+  setChecked("advYoloUseBoxesAsRoi", s.yoloUseBoxesAsRoi);
+  setChecked("advYoloDrawOverlay", s.yoloDrawOverlay);
+  setSelectValue("advRoiMode", s.roiMode);
+  setInputValue("advRoiX", s.roiX);
+  setInputValue("advRoiY", s.roiY);
+  setInputValue("advRoiWidth", s.roiWidth);
+  setInputValue("advRoiHeight", s.roiHeight);
+  setInputValue("advRoiPadding", s.roiPadding);
+  setSelectValue("advCropMode", s.cropMode);
+  setInputValue("advCropPadding", s.cropPadding);
+  setChecked("advCropKeepAspect", s.cropKeepAspect);
+  setSelectValue("advCropOutputLongEdge", String(s.cropOutputLongEdge));
+  setChecked("advOcrEnabled", s.ocrEnabled);
+  setSelectValue("advOcrEngine", s.ocrEngine);
+  setSelectValue("advOcrLanguage", s.ocrLanguage);
+  setChecked("advOcrUseTextAsHint", s.ocrUseTextAsHint);
+  setSelectValue("advSamplingMode", s.samplingMode);
+  setSelectValue("advSamplingFrameCount", String(s.samplingFrameCount));
+  setChecked("advSamplingIncludeTimestamp", s.samplingIncludeTimestamp);
+  setInputValue("advSamplingMotionPeakWindowSec", s.samplingMotionPeakWindowSec);
+  renderAdvancedRoiBox();
+}
+
+function collectAdvancedBlockSettings() {
+  const settings = {
+    yoloEnabled: readChecked("advYoloEnabled"),
+    yoloModelPath: readValueSetting("advYoloModelPath", ""),
+    yoloRuntime: readValueSetting("advYoloRuntime", "onnxruntime"),
+    yoloDevice: readValueSetting("advYoloDevice", "cpu"),
+    yoloInputSize: readNumberSetting("advYoloInputSize", 640),
+    yoloConfidence: readNumberSetting("advYoloConfidence", 0.45),
+    yoloIou: readNumberSetting("advYoloIou", 0.5),
+    yoloLabels: readValueSetting("advYoloLabels", "worker,hand,part,fixture,button,tool,machine"),
+    yoloUseBoxesAsRoi: readChecked("advYoloUseBoxesAsRoi"),
+    yoloDrawOverlay: readChecked("advYoloDrawOverlay"),
+    roiMode: readValueSetting("advRoiMode", "fullFrame"),
+    roiX: readNumberSetting("advRoiX", 0),
+    roiY: readNumberSetting("advRoiY", 0),
+    roiWidth: readNumberSetting("advRoiWidth", 0),
+    roiHeight: readNumberSetting("advRoiHeight", 0),
+    roiPadding: readNumberSetting("advRoiPadding", 0.12),
+    cropMode: readValueSetting("advCropMode", "fullFrame"),
+    cropPadding: readNumberSetting("advCropPadding", 0.12),
+    cropKeepAspect: readChecked("advCropKeepAspect"),
+    cropOutputLongEdge: readNumberSetting("advCropOutputLongEdge", 768),
+    ocrEnabled: readChecked("advOcrEnabled"),
+    ocrEngine: readValueSetting("advOcrEngine", "future"),
+    ocrLanguage: readValueSetting("advOcrLanguage", "ko"),
+    ocrUseTextAsHint: readChecked("advOcrUseTextAsHint"),
+    samplingMode: readValueSetting("advSamplingMode", "uniform"),
+    samplingFrameCount: readNumberSetting("advSamplingFrameCount", 3),
+    samplingIncludeTimestamp: readChecked("advSamplingIncludeTimestamp"),
+    samplingMotionPeakWindowSec: readNumberSetting("advSamplingMotionPeakWindowSec", 0.25)
+  };
+  state.context.blockSettings = settings;
+  return settings;
+}
+
+function renderAdvancedPresetSelect() {
+  if (!el.advPresetSelect) return;
+  const presets = state.context.advancedPresets?.length
+    ? state.context.advancedPresets
+    : [{ id: "none", name: "None", settings: defaultAdvancedBlockSettings() }];
+  el.advPresetSelect.innerHTML = presets.map((preset) =>
+    `<option value="${escapeHtml(preset.id)}" ${preset.id === state.context.activeAdvancedPresetId ? "selected" : ""}>${escapeHtml(preset.name || preset.id)}</option>`
+  ).join("");
+  if (el.advPresetName) {
+    const active = presets.find((preset) => preset.id === state.context.activeAdvancedPresetId) || presets[0];
+    el.advPresetName.value = active?.name || "None";
+  }
+}
+
+function selectAdvancedPreset(id, fill = true) {
+  const presets = state.context.advancedPresets ?? [];
+  const preset = presets.find((item) => item.id === id) || presets[0];
+  if (!preset) return;
+  state.context.activeAdvancedPresetId = preset.id;
+  state.context.blockSettings = { ...defaultAdvancedBlockSettings(), ...(preset.settings ?? {}) };
+  if (fill) fillAdvancedBlockSettings();
+  renderAdvancedPresetSelect();
+}
+
+function newAdvancedPreset() {
+  state.context.activeAdvancedPresetId = `preset_${Date.now()}`;
+  state.context.blockSettings = defaultAdvancedBlockSettings();
+  if (el.advPresetName) el.advPresetName.value = "New Preset";
+  if (el.advPresetSelect) el.advPresetSelect.value = state.context.activeAdvancedPresetId;
+  fillAdvancedBlockSettings();
+}
+
+function duplicateAdvancedPreset() {
+  const current = currentAdvancedPreset();
+  state.context.activeAdvancedPresetId = `preset_${Date.now()}`;
+  state.context.blockSettings = { ...defaultAdvancedBlockSettings(), ...(current?.settings ?? collectAdvancedBlockSettings()) };
+  if (el.advPresetName) el.advPresetName.value = `${current?.name || "Preset"} Copy`;
+  fillAdvancedBlockSettings();
+}
+
+function saveAdvancedPreset() {
+  const name = (el.advPresetName?.value || "New Preset").trim() || "New Preset";
+  const id = state.context.activeAdvancedPresetId && state.context.activeAdvancedPresetId !== "none" && !state.context.activeAdvancedPresetId.startsWith("preset_")
+    ? state.context.activeAdvancedPresetId
+    : makePresetId(name);
+  state.context.activeAdvancedPresetId = id;
+  post("saveAdvancedBlockPreset", {
+    preset: {
+      id,
+      name,
+      settings: collectAdvancedBlockSettings()
+    }
+  });
+  showToast("Advanced Block preset saved");
+}
+
+function deleteAdvancedPreset() {
+  const id = state.context.activeAdvancedPresetId;
+  if (!id || id === "none") {
+    showToast("None preset cannot be deleted");
+    return;
+  }
+
+  post("deleteAdvancedBlockPreset", { id });
+  state.context.activeAdvancedPresetId = "none";
+  showToast("Advanced Block preset deleted");
+}
+
+function currentAdvancedPreset() {
+  return (state.context.advancedPresets ?? []).find((preset) => preset.id === state.context.activeAdvancedPresetId) || null;
+}
+
+function makePresetId(name) {
+  const slug = String(name || "preset")
+    .toLowerCase()
+    .replace(/[^a-z0-9가-힣]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "preset";
+  return `${slug}-${Date.now()}`;
+}
+
+function applyAdvancedToCandidates() {
+  const settings = collectAdvancedBlockSettings();
+  const preset = currentAdvancedPreset();
+  state.context.candidates = (state.context.candidates ?? defaultContextCandidates("image")).map((candidate) => ({
+    ...candidate,
+    advancedPresetId: preset?.id || state.context.activeAdvancedPresetId || "none",
+    advancedPresetName: preset?.name || el.advPresetName?.value || "Current",
+    blockSettings: settings,
+    yoloHints: settings.yoloEnabled,
+    ocrHints: settings.ocrEnabled,
+    yoloConfidence: settings.yoloConfidence,
+    targetLabels: settings.yoloLabels,
+    roiMode: settings.roiMode,
+    cropMode: settings.cropMode,
+    samplingMode: settings.samplingMode,
+    frameCount: settings.samplingFrameCount
+  }));
+}
+
+function setAdvancedTestSource(source) {
+  state.context.advancedTestSource = source;
+  if (source === "contextImage") {
+    if (!state.context.imageUrl) {
+      showToast("Load a VLM Context image first");
+      return;
+    }
+
+    setAdvancedPreviewImage(state.context.imageUrl);
+    if (el.advancedTestStatus) el.advancedTestStatus.textContent = "Using VLM Context image for block test.";
+    return;
+  }
+
+  if (source === "selectedSegment") {
+    const segment = selectedSegment();
+    if (!segment) {
+      showToast("Select a segment in Analysis first");
+      return;
+    }
+
+    setAdvancedPreviewImage(segment.thumbnailUrl || segment.frameUrls?.[0] || "");
+    if (el.advancedTestStatus) el.advancedTestStatus.textContent = `Using Segment ${segment.sequence ?? "-"} for block test.`;
+  }
+}
+
+function runAdvancedBlockTest() {
+  const source = state.context.advancedTestSource || "advancedImage";
+  const payload = {
+    source,
+    segmentId: state.selectedId || "",
+    blockSettings: collectAdvancedBlockSettings()
+  };
+  if (el.advancedTestStatus) el.advancedTestStatus.textContent = "Running block test...";
+  post("runAdvancedBlockTest", payload);
+}
+
+function setAdvancedPreviewImage(url) {
+  const src = url ? `${url}?t=${Date.now()}` : "";
+  if (el.advancedRoiImage) el.advancedRoiImage.src = src;
+  if (el.advancedSourceImage) el.advancedSourceImage.src = src;
+  renderAdvancedRoiBox();
+}
+
+function wireAdvancedRoiPicker() {
+  if (!el.advancedRoiStage || !el.advancedRoiImage) return;
+  el.advancedRoiStage.addEventListener("pointerdown", (event) => {
+    const point = advancedImagePoint(event);
+    if (!point) return;
+    state.context.advancedRoiDragging = true;
+    state.context.advancedRoiStart = point;
+    el.advancedRoiStage.setPointerCapture(event.pointerId);
+    updateAdvancedRoiFromPoints(point, point);
+  });
+  el.advancedRoiStage.addEventListener("pointermove", (event) => {
+    if (!state.context.advancedRoiDragging || !state.context.advancedRoiStart) return;
+    const point = advancedImagePoint(event);
+    if (!point) return;
+    updateAdvancedRoiFromPoints(state.context.advancedRoiStart, point);
+  });
+  el.advancedRoiStage.addEventListener("pointerup", (event) => {
+    state.context.advancedRoiDragging = false;
+    state.context.advancedRoiStart = null;
+    try {
+      el.advancedRoiStage.releasePointerCapture(event.pointerId);
+    } catch {}
+    setSelectValue("advRoiMode", "manualRoi");
+    collectAdvancedBlockSettings();
+  });
+  ["advRoiX", "advRoiY", "advRoiWidth", "advRoiHeight"].forEach((id) => {
+    document.getElementById(id)?.addEventListener("input", renderAdvancedRoiBox);
+  });
+}
+
+function advancedRenderedImageRect() {
+  const img = el.advancedRoiImage;
+  if (!img || !img.naturalWidth || !img.naturalHeight) return null;
+  const rect = img.getBoundingClientRect();
+  const naturalRatio = img.naturalWidth / img.naturalHeight;
+  const boxRatio = rect.width / rect.height;
+  let width;
+  let height;
+  let left;
+  let top;
+  if (boxRatio > naturalRatio) {
+    height = rect.height;
+    width = height * naturalRatio;
+    left = rect.left + (rect.width - width) / 2;
+    top = rect.top;
+  } else {
+    width = rect.width;
+    height = width / naturalRatio;
+    left = rect.left;
+    top = rect.top + (rect.height - height) / 2;
+  }
+  return { left, top, width, height, naturalWidth: img.naturalWidth, naturalHeight: img.naturalHeight };
+}
+
+function advancedImagePoint(event) {
+  const rect = advancedRenderedImageRect();
+  if (!rect) return null;
+  const x = Math.max(0, Math.min(rect.naturalWidth, ((event.clientX - rect.left) / rect.width) * rect.naturalWidth));
+  const y = Math.max(0, Math.min(rect.naturalHeight, ((event.clientY - rect.top) / rect.height) * rect.naturalHeight));
+  return { x: Math.round(x), y: Math.round(y) };
+}
+
+function updateAdvancedRoiFromPoints(a, b) {
+  const x = Math.min(a.x, b.x);
+  const y = Math.min(a.y, b.y);
+  const width = Math.abs(a.x - b.x);
+  const height = Math.abs(a.y - b.y);
+  setInputValue("advRoiX", x);
+  setInputValue("advRoiY", y);
+  setInputValue("advRoiWidth", width);
+  setInputValue("advRoiHeight", height);
+  renderAdvancedRoiBox();
+}
+
+function renderAdvancedRoiBox() {
+  if (!el.advancedRoiBox) return;
+  const rect = advancedRenderedImageRect();
+  const x = readNumberSetting("advRoiX", 0);
+  const y = readNumberSetting("advRoiY", 0);
+  const width = readNumberSetting("advRoiWidth", 0);
+  const height = readNumberSetting("advRoiHeight", 0);
+  if (!rect || width <= 0 || height <= 0) {
+    el.advancedRoiBox.style.display = "none";
+    return;
+  }
+
+  const stageRect = el.advancedRoiStage.getBoundingClientRect();
+  el.advancedRoiBox.style.display = "block";
+  el.advancedRoiBox.style.left = `${rect.left - stageRect.left + (x / rect.naturalWidth) * rect.width}px`;
+  el.advancedRoiBox.style.top = `${rect.top - stageRect.top + (y / rect.naturalHeight) * rect.height}px`;
+  el.advancedRoiBox.style.width = `${(width / rect.naturalWidth) * rect.width}px`;
+  el.advancedRoiBox.style.height = `${(height / rect.naturalHeight) * rect.height}px`;
+}
+
+function renderContextLab() {
+  if (el.contextImage) {
+    el.contextImage.src = state.context.imageUrl || "";
+  }
+  if (el.contextImageName) {
+    el.contextImageName.textContent = state.context.imageName || "No image loaded";
+  }
+  if (el.contextRunCompareBtn) {
+    el.contextRunCompareBtn.disabled = !state.context.imageUrl || state.context.running;
+    el.contextRunCompareBtn.textContent = state.context.running ? "Running..." : "Run Auto Compare";
+  }
+  if (el.contextApplyBestBtn) {
+    el.contextApplyBestBtn.disabled = !currentContextBestRun();
+  }
+  if (el.contextStatus && !state.context.running) {
+    el.contextStatus.textContent = state.context.runs.length
+      ? "Compare complete. Select Best if one result is preferred."
+      : state.context.source === "selectedSegment"
+        ? "Selected segment is ready. Run compare."
+        : "Load an image and run compare.";
+  }
+  renderContextRows();
+  renderContextCandidateSetup();
+  renderContextRecommendation();
+  renderContextHistory();
+}
+
+function renderContextCandidateSetup() {
+  if (!el.contextCandidateSetup) return;
+  const candidates = state.context.candidates ?? defaultContextCandidates(state.context.source === "selectedSegment" ? "segment" : "image");
+  state.context.candidates = candidates;
+  el.contextCandidateSetup.innerHTML = candidates.map((candidate, index) => `
+    <div class="context-candidate-card" data-candidate-index="${index}">
+      <div class="context-candidate-head">
+        <b>${escapeHtml(candidate.name)}</b>
+        <label><input type="checkbox" data-candidate-field="enabled" ${candidate.enabled ? "checked" : ""}> Enabled</label>
+      </div>
+      <div class="context-candidate-grid">
+        <div><div class="label">Image Size</div><select class="select" data-candidate-field="imageLongEdge">
+          ${contextOption([384,512,640,768,896,1024], candidate.imageLongEdge, " px")}
+        </select></div>
+        <div class="wide preset-select-row">
+          <div>
+            <div class="label">Advanced Preset</div>
+            <b>${escapeHtml(presetName(candidate.advancedPresetId || "none"))}</b>
+            <span class="notice">${escapeHtml(advancedPresetSummary(candidate.advancedPresetId || "none"))}</span>
+          </div>
+          <button class="btn small-btn" data-edit-advanced-preset="${index}" type="button">Preset 선택</button>
+        </div>
+        <div><div class="label">Frames</div><select class="select" data-candidate-field="frameCount">
+          ${contextOption([1,2,3,5,8], candidate.frameCount)}
+        </select></div>
+        <div><div class="label">Sampling</div><select class="select" data-candidate-field="samplingMode">
+          ${contextOption(["first","middle","uniform","last"], candidate.samplingMode)}
+        </select></div>
+        <div><div class="label">Prompt</div><select class="select" data-candidate-field="promptMode">
+          ${contextOption(["fast","description"], candidate.promptMode)}
+        </select></div>
+        <div><div class="label">Tokens</div><select class="select" data-candidate-field="maxOutputTokens">
+          ${contextOption([80,120,160,224,320], candidate.maxOutputTokens)}
+        </select></div>
+      </div>
+    </div>
+  `).join("");
+
+  el.contextCandidateSetup.querySelectorAll("[data-candidate-field]").forEach((control) => {
+    control.addEventListener("change", updateContextCandidateFromControl);
+    control.addEventListener("input", updateContextCandidateFromControl);
+  });
+  el.contextCandidateSetup.querySelectorAll("[data-edit-advanced-preset]").forEach((button) => {
+    button.addEventListener("click", () => openAdvancedPresetPicker(Number(button.dataset.editAdvancedPreset)));
+  });
+}
+
+function contextOption(values, selected, suffix = "") {
+  return values.map((value) => {
+    const valueText = String(value);
+    return `<option value="${escapeHtml(valueText)}" ${valueText === String(selected) ? "selected" : ""}>${escapeHtml(valueText + suffix)}</option>`;
+  }).join("");
+}
+
+function advancedPresetOptions(selected) {
+  const presets = state.context.advancedPresets?.length
+    ? state.context.advancedPresets
+    : [{ id: "none", name: "None", settings: defaultAdvancedBlockSettings() }];
+  return presets.map((preset) =>
+    `<option value="${escapeHtml(preset.id)}" ${preset.id === selected ? "selected" : ""}>${escapeHtml(preset.name || preset.id)}</option>`
+  ).join("");
+}
+
+function advancedPresetSummary(id) {
+  const settings = blockSettingsForPreset(id, defaultAdvancedBlockSettings(), false);
+  const parts = [
+    `YOLO ${settings.yoloEnabled ? "On" : "Off"}`,
+    `ROI ${settings.roiMode || "fullFrame"}`,
+    `Crop ${settings.cropMode || "fullFrame"}`,
+    `OCR ${settings.ocrEnabled ? "On" : "Off"}`
+  ];
+  return parts.join(" · ");
+}
+
+function updateContextCandidateFromControl(event) {
+  const card = event.target.closest("[data-candidate-index]");
+  if (!card) return;
+  const index = Number(card.dataset.candidateIndex);
+  const field = event.target.dataset.candidateField;
+  const candidates = state.context.candidates ?? [];
+  const candidate = candidates[index];
+  if (!candidate || !field) return;
+
+  if (event.target.type === "checkbox") {
+    candidate[field] = event.target.checked;
+  } else if (["imageLongEdge", "frameCount", "maxOutputTokens"].includes(field)) {
+    candidate[field] = Number(event.target.value) || candidate[field];
+  } else if (field === "yoloConfidence") {
+    candidate[field] = Number(event.target.value) || 0.45;
+  } else if (field === "advancedPresetId") {
+    candidate[field] = event.target.value;
+    const preset = (state.context.advancedPresets ?? []).find((item) => item.id === event.target.value);
+    candidate.advancedPresetName = preset?.name || "None";
+    if (preset?.settings) {
+      candidate.blockSettings = { ...defaultAdvancedBlockSettings(), ...preset.settings };
+      applyBlockSettingsToCandidate(candidate, candidate.blockSettings);
+    }
+    renderContextCandidateSetup();
+  } else {
+    candidate[field] = event.target.value;
+  }
+}
+
+function collectContextCandidates() {
+  if (el.contextCandidateSetup) {
+    el.contextCandidateSetup.querySelectorAll("[data-candidate-field]").forEach((control) => {
+      updateContextCandidateFromControl({ target: control, silent: true });
+    });
+  }
+
+  return (state.context.candidates ?? [])
+    .map((candidate) => {
+      const settings = blockSettingsForPreset(candidate.advancedPresetId, candidate.blockSettings, false);
+      const normalized = {
+        ...candidate,
+        advancedPresetName: presetName(candidate.advancedPresetId),
+        blockSettings: settings,
+        imageLongEdge: Number(candidate.imageLongEdge) || 768,
+        frameCount: Number(candidate.frameCount) || 1,
+        maxOutputTokens: Number(candidate.maxOutputTokens) || 120,
+        yoloConfidence: Number(candidate.yoloConfidence) || 0.45
+      };
+      applyPresetAdvancedFieldsToCandidate(normalized, settings);
+      return normalized;
+    });
+}
+
+function presetName(id) {
+  return (state.context.advancedPresets ?? []).find((preset) => preset.id === id)?.name || "None";
+}
+
+function blockSettingsForPreset(id, fallback = null, allowCurrent = true) {
+  const preset = (state.context.advancedPresets ?? []).find((item) => item.id === id);
+  const presetSettings = preset && (preset.id !== "none" || !fallback) ? preset.settings : null;
+  return { ...defaultAdvancedBlockSettings(), ...(presetSettings ?? fallback ?? (allowCurrent ? collectAdvancedBlockSettings() : {})) };
+}
+
+function openAdvancedPresetPicker(index) {
+  const candidate = state.context.candidates?.[index];
+  if (!candidate) return;
+  state.context.presetPickerCandidateIndex = index;
+  if (el.presetPickerTitle) {
+    el.presetPickerTitle.textContent = `${candidate.name || "Candidate"} 후보에 적용할 Advanced Blocks 프리셋을 선택합니다.`;
+  }
+  if (el.presetPickerSelect) {
+    el.presetPickerSelect.innerHTML = advancedPresetOptions(candidate.advancedPresetId || "none");
+    el.presetPickerSelect.value = candidate.advancedPresetId || "none";
+  }
+  renderAdvancedPresetPickerSummary();
+  el.advancedPresetPickerDialog?.showModal();
+}
+
+function renderAdvancedPresetPickerSummary() {
+  if (!el.presetPickerSummary) return;
+  const id = el.presetPickerSelect?.value || "none";
+  const settings = blockSettingsForPreset(id, defaultAdvancedBlockSettings(), false);
+  const preset = (state.context.advancedPresets ?? []).find((item) => item.id === id);
+  const rows = [
+    ["Preset", preset?.name || "None"],
+    ["YOLO", settings.yoloEnabled ? `On / ${settings.yoloLabels || "-"}` : "Off"],
+    ["ROI", `${settings.roiMode || "fullFrame"} / ${settings.roiWidth || 0}x${settings.roiHeight || 0}`],
+    ["Crop", `${settings.cropMode || "fullFrame"} / ${settings.cropOutputLongEdge || 768}px`],
+    ["OCR", settings.ocrEnabled ? `${settings.ocrEngine || "future"} / ${settings.ocrLanguage || "ko"}` : "Off"],
+    ["Sampling", `${settings.samplingMode || "uniform"} / ${settings.samplingFrameCount || 1} frame(s)`]
+  ];
+  el.presetPickerSummary.innerHTML = rows
+    .map(([key, value]) => `<span>${escapeHtml(key)}</span><b>${escapeHtml(value)}</b>`)
+    .join("");
+}
+
+function applyPickerPresetToCandidate() {
+  const index = state.context.presetPickerCandidateIndex;
+  if (index === null || index === undefined) return;
+  applyPresetToCandidate(index, el.presetPickerSelect?.value || "none");
+  el.advancedPresetPickerDialog?.close();
+  renderContextCandidateSetup();
+}
+
+function editPickerPresetInAdvanced() {
+  const id = el.presetPickerSelect?.value || "none";
+  const index = state.context.presetPickerCandidateIndex;
+  if (index !== null && index !== undefined) {
+    applyPresetToCandidate(index, id);
+  }
+  selectAdvancedPreset(id, true);
+  el.advancedPresetPickerDialog?.close();
+  if (el.tabAdvanced) {
+    el.tabAdvanced.checked = true;
+  }
+  renderContextCandidateSetup();
+  showToast(`${presetName(id)} preset loaded in Advanced Blocks`);
+}
+
+function applyPresetToCandidate(index, id) {
+  const candidate = state.context.candidates?.[index];
+  if (!candidate) return;
+  const settings = blockSettingsForPreset(id, defaultAdvancedBlockSettings(), false);
+  candidate.advancedPresetId = id;
+  candidate.advancedPresetName = presetName(id);
+  candidate.blockSettings = settings;
+  applyPresetAdvancedFieldsToCandidate(candidate, settings);
+}
+
+function applyPresetAdvancedFieldsToCandidate(candidate, settings) {
+  candidate.yoloHints = !!settings.yoloEnabled;
+  candidate.ocrHints = !!settings.ocrEnabled;
+  candidate.yoloConfidence = Number(settings.yoloConfidence) || 0.45;
+  candidate.targetLabels = settings.yoloLabels || candidate.targetLabels || "";
+  candidate.roiMode = settings.roiMode || "fullFrame";
+  candidate.cropMode = settings.cropMode || "fullFrame";
+}
+
+function applyBlockSettingsToCandidate(candidate, settings) {
+  candidate.yoloHints = !!settings.yoloEnabled;
+  candidate.ocrHints = !!settings.ocrEnabled;
+  candidate.yoloConfidence = Number(settings.yoloConfidence) || 0.45;
+  candidate.targetLabels = settings.yoloLabels || candidate.targetLabels || "";
+  candidate.roiMode = settings.roiMode || "fullFrame";
+  candidate.cropMode = settings.cropMode || "fullFrame";
+  candidate.samplingMode = settings.samplingMode || "uniform";
+  candidate.frameCount = Number(settings.samplingFrameCount) || candidate.frameCount || 1;
+  candidate.imageLongEdge = Number(settings.cropOutputLongEdge) || candidate.imageLongEdge || 768;
+}
+
+function renderContextRows() {
+  if (!el.contextRows) return;
+  const rows = state.context.runs ?? [];
+  if (!rows.length) {
+    el.contextRows.innerHTML = `<tr><td colspan="7" class="notice">No context experiment results.</td></tr>`;
+    return;
+  }
+
+  el.contextRows.innerHTML = rows.map((run) => {
+    const candidate = run.candidate ?? {};
+    const best = run.isBest ? `<span class="chip best-chip">Best</span>` : `<button class="btn small-btn" data-context-best="${escapeHtml(run.id)}" type="button">Best</button>`;
+    return `
+      <tr>
+        <td><b>${escapeHtml(candidate.name || "-")}</b><div class="notice">${escapeHtml(candidate.description || "")}</div></td>
+        <td>${formatContextSettingsDetailed(candidate)}</td>
+        <td class="context-description">${escapeHtml(run.description || "(empty)")}</td>
+        <td class="latency-cell">${formatMs(run.latencyMs)}</td>
+        <td><div>Pre ${formatMs(run.preprocessMs)}</div><div>VLM ${formatMs(run.vlmMs)}</div></td>
+        <td><button class="btn small-btn" data-context-trace="${escapeHtml(run.id)}" type="button">Trace</button></td>
+        <td>${best}</td>
+      </tr>`;
+  }).join("");
+
+  el.contextRows.querySelectorAll("[data-context-best]").forEach((button) => {
+    button.addEventListener("click", () => {
+      post("markVlmContextBest", { runId: button.dataset.contextBest });
+    });
+  });
+  el.contextRows.querySelectorAll("[data-context-trace]").forEach((button) => {
+    button.addEventListener("click", () => openContextTrace(button.dataset.contextTrace || ""));
+  });
+}
+
+function renderContextRecommendation() {
+  if (!el.contextRecommendation) return;
+  const recommendation = state.context.recommendation;
+  if (!recommendation?.hasData) {
+    el.contextRecommendation.innerHTML = `<b>No Best label yet</b><div class="reason">결과에서 Best를 선택하면 전처리 추천 가이드가 표시됩니다.</div>`;
+    return;
+  }
+
+  const candidate = recommendation.recommendedCandidate ?? {};
+  const reasons = (recommendation.reasons ?? []).map((reason) => `<div class="reason">- ${escapeHtml(reason)}</div>`).join("");
+  el.contextRecommendation.innerHTML = `
+    <b>${escapeHtml(recommendation.summary || "Recommended settings")}</b>
+    <div class="reason">추천: ${escapeHtml(formatContextSettings(candidate))}</div>
+    <div class="reason">Best 누적: ${recommendation.bestCount ?? 0}건 · 평균 ${formatMs(recommendation.averageBestLatencyMs)}</div>
+    ${reasons}`;
+}
+
+function renderContextHistory() {
+  if (!el.contextHistory) return;
+  const runs = state.context.history ?? [];
+  if (!runs.length) {
+    el.contextHistory.innerHTML = `<div class="notice">No saved context experiments.</div>`;
+    return;
+  }
+
+  el.contextHistory.innerHTML = runs.slice(0, 20).map((run) => {
+    const candidate = run.candidate ?? {};
+    const mark = run.isBest ? `<span class="chip best-chip">Best</span>` : `<span></span>`;
+    return `
+      <div class="context-history-item">
+        <b>${escapeHtml(candidate.name || "-")} · ${formatMs(run.latencyMs)} ${mark}</b>
+        <span>${escapeHtml(run.inputLabel || run.inputFileName || "-")} · ${escapeHtml(run.inputType || "image")} · ${escapeHtml(run.modelName || "-")}</span>
+        <span>${escapeHtml(run.description || "(empty)")}</span>
+      </div>`;
+  }).join("");
+}
+
+function reconcileContextBestFlags() {
+  if (!state.context.runs?.length || !state.context.history?.length) return;
+  const bestById = new Map(state.context.history.map((run) => [run.id, !!run.isBest]));
+  state.context.runs = state.context.runs.map((run) => ({
+    ...run,
+    isBest: bestById.has(run.id) ? bestById.get(run.id) : run.isBest
+  }));
+}
+
+function currentContextBestRun() {
+  return (state.context.runs ?? []).find((run) => run.isBest) ||
+    (state.context.history ?? []).find((run) => run.isBest) ||
+    null;
+}
+
+function openContextTrace(runId) {
+  const run = [...(state.context.runs ?? []), ...(state.context.history ?? [])].find((item) => item.id === runId);
+  if (!run) {
+    showToast("Trace is not available");
+    return;
+  }
+
+  state.context.traceRun = run;
+  state.context.traceTab = "prompt";
+  if (el.contextTraceTitle) {
+    const candidate = run.candidate ?? {};
+    el.contextTraceTitle.textContent = `${candidate.name || "Context"} · ${run.inputLabel || run.inputFileName || "-"} · ${formatMs(run.latencyMs)}`;
+  }
+  if (el.contextTraceFrames) {
+    const frames = run.frameUrls ?? [];
+    el.contextTraceFrames.innerHTML = frames.length
+      ? frames.map((url) => `<img class="trace-frame" src="${escapeHtml(url)}" alt="Context VLM frame">`).join("")
+      : `<div class="notice">No input frame was recorded for this run.</div>`;
+  }
+  setContextTraceTab("prompt");
+  el.contextTraceDialog?.showModal();
+}
+
+function setContextTraceTab(tabName) {
+  state.context.traceTab = tabName;
+  document.querySelectorAll(".context-trace-tab").forEach((button) => {
+    button.classList.toggle("selected", button.dataset.contextTraceTab === tabName);
+  });
+
+  const run = state.context.traceRun;
+  if (!el.contextTraceText) return;
+  if (!run) {
+    el.contextTraceText.textContent = "No context trace is selected.";
+    return;
+  }
+
+  const values = {
+    prompt: run.prompt || "No prompt captured.",
+    request: prettyJson(run.requestJson),
+    blocks: prettyJson(run.blockSettings),
+    raw: prettyJson(run.rawResponse),
+    description: run.description || "(empty)"
+  };
+  el.contextTraceText.textContent = values[tabName] ?? values.prompt;
+}
+
+function formatContextSettings(candidate) {
+  return `${candidate.advancedPresetName || "None"} · ${candidate.imageLongEdge ?? "-"}px · ${candidate.frameCount ?? 1}F · ${candidate.samplingMode || "uniform"} · motion ${candidate.motionSummary ? "on" : "off"} · YOLO ${candidate.yoloHints ? "on" : "off"} · OCR ${candidate.ocrHints ? "on" : "off"} · ${candidate.maxOutputTokens ?? "-"} tokens`;
+}
+
+function formatContextSettingsDetailed(candidate) {
+  const items = [
+    ["Preset", candidate.advancedPresetName || "None"],
+    ["Image", `${candidate.imageLongEdge ?? "-"} px`],
+    ["Frames", `${candidate.frameCount ?? 1}`],
+    ["Sampling", candidate.samplingMode || "uniform"],
+    ["Prompt", candidate.promptMode || "description"],
+    ["Tokens", candidate.maxOutputTokens ?? "-"],
+    ["Motion", candidate.motionSummary ? "On" : "Off"],
+    ["YOLO", candidate.yoloHints ? `On (${candidate.yoloConfidence ?? 0.45})` : "Off"],
+    ["OCR", candidate.ocrHints ? "On" : "Off"],
+    ["ROI", candidate.roiMode || "fullFrame"],
+    ["Crop", candidate.cropMode || "fullFrame"]
+  ];
+  return `<div class="settings-grid">${items.map(([key, value]) => `<span>${escapeHtml(key)}</span><b>${escapeHtml(value)}</b>`).join("")}</div>`;
+}
+
+function formatMs(value) {
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) return "-";
+  return number >= 1000 ? `${(number / 1000).toFixed(2)}s` : `${number.toFixed(0)}ms`;
 }
 
 function onVideoLoaded(data) {
@@ -1498,6 +2505,15 @@ function setSelectValue(id, value) {
 function setInputValue(id, value) {
   const control = document.getElementById(id);
   if (control) control.value = value ?? "";
+}
+
+function setChecked(id, value) {
+  const control = document.getElementById(id);
+  if (control) control.checked = !!value;
+}
+
+function readChecked(id) {
+  return !!document.getElementById(id)?.checked;
 }
 
 function renderVlmStatus() {

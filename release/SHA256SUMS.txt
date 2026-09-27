@@ -1,0 +1,4 @@
+f7782c720f847edd351246ac3e6575b9d1027ee36abe34a04dbdda8473401075 *release/ProcessVideoAnalyzer-v0.2.0-win-x64.tar.part01
+62cc7aee6f1f7ee47a2a381488b438e52689bb9f298f6e0214b61c3e84c466a4 *release/ProcessVideoAnalyzer-v0.2.0-win-x64.tar.part02
+3850f5acdabf33800d79357a0fb1494d42004bd376fe9f9159870df6e056bcd8 *release/ProcessVideoAnalyzer-v0.2.0-win-x64.tar.part03
+bc40f8575b7751cd264aeb5d67eb23ca36b37be71bbbf1a43881defa472e9564 *release/README-ko.txt

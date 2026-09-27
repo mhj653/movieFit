@@ -55,6 +55,33 @@ Example:
             };
         }
 
+        if (request.PromptMode.Equals("contextDescription", StringComparison.OrdinalIgnoreCase))
+        {
+            var contextFacts = string.IsNullOrWhiteSpace(request.DetectionFacts)
+                ? ""
+                : $"\nContext hints:\n{request.DetectionFacts}\nUse these hints only to focus attention. Trust the image when there is conflict.";
+            var contextPrompt = $$"""
+Return one valid JSON object only. No markdown.
+Use {{language}}.
+Look at this manufacturing image or ordered frame sequence and describe the actual visible work.
+Focus on what the worker, machine, tool, or part is doing.
+Do not answer with only a generic state such as "machine is operating" or "no human intervention".
+If the action is uncertain, describe only what is visibly happening.
+Keep description as one concise Korean sentence.
+{{contextFacts}}
+
+Required JSON:
+{"description":"작업자가 수행 중인 실제 작업을 한 문장으로 설명","confidence":0.0}
+""";
+
+            return new VlmPreparedRequest
+            {
+                Source = request,
+                Prompt = contextPrompt,
+                ImagePaths = request.FramePaths.Where(File.Exists).ToList()
+            };
+        }
+
         var detectionFacts = string.IsNullOrWhiteSpace(request.DetectionFacts)
             ? ""
             : $"\n{request.DetectionFacts}\nUse these detector labels as visual hints only. If they conflict with the image, trust the image.";

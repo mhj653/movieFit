@@ -11,14 +11,16 @@
     .side-tabs{border-right:1px solid var(--line);background:#0f141a;padding:10px 8px;display:flex;flex-direction:column;gap:7px}
     .side-tab{height:38px;display:flex;align-items:center;padding:0 11px;border:1px solid transparent;border-radius:7px;color:var(--muted);font-size:13px;font-weight:700;cursor:pointer}
     .side-tab:hover{background:#161b22;color:var(--text);border-color:var(--line2)}
-    #tabVideo:checked ~ .workspace .side-tab[for=tabVideo],
+    #tabContext:checked ~ .workspace .side-tab[for=tabContext],
+    #tabAdvanced:checked ~ .workspace .side-tab[for=tabAdvanced],
     #tabCapture:checked ~ .workspace .side-tab[for=tabCapture],
-    #tabAutomation:checked ~ .workspace .side-tab[for=tabAutomation]{background:#1f6feb;color:white;border-color:#388bfd}
+    #tabVideo:checked ~ .workspace .side-tab[for=tabVideo]{background:#1f6feb;color:white;border-color:#388bfd}
     .tab-content{min-height:0;position:relative}
     .tab-panel{display:none;height:100%;min-height:0}
-    #tabVideo:checked ~ .workspace .video-tab-panel,
+    #tabContext:checked ~ .workspace .context-tab-panel,
+    #tabAdvanced:checked ~ .workspace .advanced-tab-panel,
     #tabCapture:checked ~ .workspace .capture-tab-panel,
-    #tabAutomation:checked ~ .workspace .automation-tab-panel{display:block}
+    #tabVideo:checked ~ .workspace .video-tab-panel{display:block}
     .video-tab-panel .shell{height:100%;padding:10px}
     .video-tab-panel .summary{padding:9px;gap:6px}
     .video-tab-panel .summary>.section-title{font-size:12px}
@@ -30,21 +32,12 @@
     .video-tab-panel .summary .progress-meta{margin-bottom:3px}
     .video-tab-panel .summary .progress-track{height:5px}
     .video-tab-panel .summary #progressMessage{min-height:13px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .automation-mock{height:100%;min-height:0;padding:10px;display:grid;grid-template-columns:320px minmax(540px,1fr) 360px;gap:10px;overflow:hidden}
-    .automation-mock .panel{padding:12px;display:flex;flex-direction:column;gap:10px;min-height:0;overflow:hidden}
-    .mock-list{display:flex;flex-direction:column;gap:8px;overflow:auto}
-    .mock-item{display:grid;grid-template-columns:42px 1fr 54px;gap:8px;align-items:center;padding:9px;background:var(--panel2);border:1px solid var(--line2);border-radius:8px}
-    .mock-item b{font-size:12px}.mock-item span{font-size:10px;color:var(--muted)}
     .priority{font-size:11px;font-weight:800;text-align:center;border-radius:999px;padding:4px 0;border:1px solid var(--line)}
     .priority.high{color:#7ee787;background:#12251b;border-color:#238636}.priority.mid{color:#ffd58a;background:#2b2111;border-color:#9e6a03}
-    .automation-table{width:100%;border-collapse:collapse;font-size:12px;min-width:760px}
-    .automation-table th,.automation-table td{border-bottom:1px solid var(--line2);padding:9px 8px;text-align:left;vertical-align:top}
-    .automation-table th{color:var(--muted);font-size:11px;background:#11161d;position:sticky;top:0}
     .table-wrap{min-height:0;overflow:auto;border:1px solid var(--line2);border-radius:8px}
     .review-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
     .review-box{padding:10px;background:var(--panel2);border:1px solid var(--line2);border-radius:8px}
     .review-box b{display:block;font-size:12px;margin-bottom:6px}.review-box span{font-size:11px;color:var(--muted);line-height:1.45}
-    .mock-actions{display:flex;gap:7px;flex-wrap:wrap}
     .history-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
     .history-list{flex:1;min-height:0;display:flex;flex-direction:column;gap:4px;max-height:none;overflow:auto}
     .history-item{width:100%;height:30px;display:grid;grid-template-columns:minmax(0,1fr) 52px 38px 24px;gap:5px;align-items:center;padding:0 5px;background:var(--panel2);border:1px solid var(--line2);border-radius:7px;text-align:left;color:var(--text);font:inherit;cursor:pointer}
@@ -61,6 +54,55 @@
     .capture-status-grid{display:grid;grid-template-columns:120px 1fr;gap:8px;font-size:12px}
     .capture-status-grid .k{color:var(--muted)}
     .capture-hint{padding:10px;border:1px solid var(--line2);border-radius:8px;background:var(--panel2);font-size:11px;color:var(--muted);line-height:1.5}
+    .context-lab{height:100%;min-height:0;padding:10px;display:grid;grid-template-columns:310px minmax(720px,1fr) 320px;gap:10px}
+    .context-lab .panel{padding:12px;display:flex;flex-direction:column;gap:10px;min-height:0;overflow:hidden}
+    .context-preview{height:260px;background:#05070a;border:1px solid var(--line2);border-radius:8px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+    .context-preview img{width:100%;height:100%;object-fit:contain}
+    .context-actions{display:flex;gap:7px;flex-wrap:wrap}
+    .preset-grid{display:grid;grid-template-columns:1fr;gap:7px}
+    .preset-card{padding:9px;border:1px solid var(--line2);border-radius:8px;background:var(--panel2);display:grid;grid-template-columns:1fr auto;gap:5px;align-items:center}
+    .preset-card b{font-size:12px}.preset-card span{font-size:10px;color:var(--muted)}
+    .context-setup{display:grid;grid-template-columns:repeat(3,minmax(210px,1fr));gap:8px;overflow:auto;flex:0 0 auto;max-height:330px;padding-bottom:2px}
+    .context-candidate-card{border:1px solid var(--line2);border-radius:8px;background:var(--panel2);padding:9px;display:flex;flex-direction:column;gap:8px;min-width:210px}
+    .context-candidate-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+    .context-candidate-head b{font-size:12px}.context-candidate-head label{display:flex;align-items:center;gap:5px;font-size:10px;color:var(--muted)}
+    .context-candidate-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+    .context-candidate-grid .wide{grid-column:1/-1}
+    .context-candidate-grid .label{font-size:10px;margin-bottom:3px}
+    .context-candidate-grid .input,.context-candidate-grid .select{height:29px;padding:4px 7px;font-size:11px;border-radius:6px}
+    .context-toggle-row{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+    .context-toggle-row label{height:28px;border:1px solid var(--line);border-radius:6px;background:#11161d;display:flex;align-items:center;gap:5px;padding:0 7px;font-size:10px;color:#c9d1d9}
+    .settings-grid{display:grid;grid-template-columns:70px 1fr;gap:3px 7px;min-width:150px}
+    .settings-grid span{font-size:10px;color:var(--muted)}.settings-grid b{font-size:10px;color:#c9d1d9;font-weight:700}
+    .context-table-wrap{min-height:0;overflow:auto;border:1px solid var(--line2);border-radius:8px}
+    .context-table{width:100%;border-collapse:collapse;font-size:12px;min-width:980px}
+    .context-table th,.context-table td{border-bottom:1px solid var(--line2);padding:8px;text-align:left;vertical-align:top}
+    .context-table th{position:sticky;top:0;background:#11161d;color:var(--muted);font-size:11px}
+    .context-description{min-width:250px;line-height:1.45}.latency-cell{white-space:nowrap;font-weight:800}
+    .best-chip{color:#7ee787;border-color:#238636;background:#12251b}
+    .recommendation-card{padding:10px;border:1px solid #2b4f70;background:#0d1b29;border-radius:8px;display:flex;flex-direction:column;gap:8px}
+    .recommendation-card b{font-size:13px}.recommendation-card .reason{font-size:11px;color:#c9d1d9;line-height:1.45}
+    .context-history{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:6px}
+    .context-history-item{padding:8px;border:1px solid var(--line2);border-radius:8px;background:var(--panel2);display:grid;gap:3px}
+    .context-history-item b{font-size:11px}.context-history-item span{font-size:10px;color:var(--muted)}
+    .advanced-layout{height:100%;min-height:0;padding:10px;display:grid;grid-template-columns:340px repeat(3,minmax(280px,1fr));gap:10px;overflow:auto}
+    .advanced-panel{padding:12px;display:flex;flex-direction:column;gap:10px;min-height:0}
+    .advanced-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .advanced-grid .wide{grid-column:1/-1}
+    .advanced-switches{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+    .advanced-switches label{height:32px;border:1px solid var(--line);border-radius:7px;background:var(--panel2);display:flex;align-items:center;gap:7px;padding:0 9px;font-size:11px;color:#c9d1d9}
+    .advanced-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:auto}
+    .roi-stage{height:220px;background:#05070a;border:1px solid var(--line2);border-radius:8px;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;cursor:crosshair}
+    .roi-stage img{width:100%;height:100%;object-fit:contain;display:block}
+    .roi-box{position:absolute;border:2px solid #58a6ff;background:rgba(88,166,255,.14);box-shadow:0 0 0 9999px rgba(0,0,0,.16);pointer-events:none;display:none}
+    .advanced-test-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;min-height:0}
+    .advanced-test-grid img{width:100%;height:150px;object-fit:contain;background:#05070a;border:1px solid var(--line2);border-radius:8px}
+    .advanced-test-log{min-height:96px;max-height:160px;overflow:auto;background:#05070a;border:1px solid var(--line2);border-radius:8px;padding:8px;font-size:10px;color:#c9d1d9;white-space:pre-wrap}
+    .preset-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+    .preset-select-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:end;padding:8px;border:1px solid var(--line2);border-radius:8px;background:#11161d}
+    .preset-select-row b{display:block;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .preset-picker-summary{display:grid;grid-template-columns:88px 1fr;gap:6px 10px;padding:10px;border:1px solid var(--line2);border-radius:8px;background:var(--panel2);font-size:12px}
+    .preset-picker-summary span{color:var(--muted)}.preset-picker-summary b{color:#c9d1d9}
   </style>
 </head>
 <body>
@@ -81,14 +123,16 @@
     </div>
   </div>
 
-  <input id="tabVideo" class="tab-radio" type="radio" name="mainTab" checked>
+  <input id="tabContext" class="tab-radio" type="radio" name="mainTab" checked>
+  <input id="tabAdvanced" class="tab-radio" type="radio" name="mainTab">
   <input id="tabCapture" class="tab-radio" type="radio" name="mainTab">
-  <input id="tabAutomation" class="tab-radio" type="radio" name="mainTab">
+  <input id="tabVideo" class="tab-radio" type="radio" name="mainTab">
   <div class="workspace">
     <nav class="side-tabs" aria-label="Main sections">
-      <label class="side-tab" for="tabVideo">Analysis</label>
+      <label class="side-tab" for="tabContext">VLM Context</label>
+      <label class="side-tab" for="tabAdvanced">Advanced Blocks</label>
       <label class="side-tab" for="tabCapture">Live Capture</label>
-      <label class="side-tab" for="tabAutomation">Automation Link</label>
+      <label class="side-tab" for="tabVideo">Analysis</label>
     </nav>
     <main class="tab-content">
       <section class="tab-panel video-tab-panel">
@@ -267,19 +311,165 @@
         </div>
       </section>
 
-      <section class="tab-panel automation-tab-panel">
-        <div class="optimization-placeholder-wrap">
-          <section class="card optimization-placeholder">
-            <div class="placeholder-icon">◆</div>
-            <div class="section-title">Optimization Guide</div>
-            <div class="placeholder-title">영상 분석 결과를 기반으로 한 개선 가이드 기능을 준비 중입니다.</div>
-            <div class="help">이번 최종본은 영상 분석 · Segment 편집 · 결과 검토/수정 · History · AI 설정까지를 범위로 합니다. Optimization Guide는 이후 별도 설계 후 연결합니다.</div>
-            <div class="placeholder-points">
-              <span class="chip">Analysis History 연계</span>
-              <span class="chip">Guide Scope 선택</span>
-              <span class="chip">Engineering Context</span>
-              <span class="chip">Optimization Result</span>
+      <section class="tab-panel context-tab-panel">
+        <div class="context-lab">
+          <section class="card panel">
+            <div class="section-title">VLM Context Builder</div>
+            <div class="context-preview"><img id="contextImage" alt="Context Builder input image"></div>
+            <div>
+              <div class="label">Input Image</div>
+              <div id="contextImageName" class="value">No image loaded</div>
             </div>
+            <div class="context-actions">
+              <button id="contextLoadImageBtn" class="btn primary" type="button">Load Image</button>
+              <button id="contextUseSegmentBtn" class="btn" type="button">Use Selected Segment</button>
+              <button id="contextRunCompareBtn" class="btn" type="button" disabled>Run Auto Compare</button>
+            </div>
+            <div class="notice">Fast / Balanced / Accurate를 순차 실행하고 Description 품질과 Latency를 비교합니다.</div>
+            <div class="sep"></div>
+            <div class="section-title">Builder Blocks</div>
+            <div class="preset-grid">
+              <div class="preset-card"><div><b>Frames</b><span>Sampling + frame count</span></div><span class="chip">ready</span></div>
+              <div class="preset-card"><div><b>Vision Hints</b><span>Motion / YOLO / OCR switches</span></div><span class="chip">pluggable</span></div>
+              <div class="preset-card"><div><b>Focus</b><span>ROI / Crop options for future blocks</span></div><span class="chip">prepared</span></div>
+            </div>
+          </section>
+
+          <section class="card panel">
+            <div class="history-head">
+              <div>
+                <div class="section-title">Compare Setup</div>
+                <div id="contextStatus" class="notice">Load an image and run compare.</div>
+              </div>
+            </div>
+            <div id="contextCandidateSetup" class="context-setup"></div>
+            <div class="sep"></div>
+            <div class="section-title">Auto Compare Results</div>
+            <div class="context-table-wrap">
+              <table class="context-table">
+                <thead>
+                  <tr>
+                    <th>Preset</th>
+                    <th>Settings</th>
+                    <th>Description</th>
+                    <th>Latency</th>
+                    <th>Breakdown</th>
+                    <th>Trace</th>
+                    <th>Best</th>
+                  </tr>
+                </thead>
+                <tbody id="contextRows">
+                  <tr><td colspan="7" class="notice">No context experiment results.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="card panel">
+            <div class="section-title">Recommendation Guide</div>
+            <div id="contextRecommendation" class="recommendation-card">
+              <b>No Best label yet</b>
+              <div class="reason">결과에서 Best를 선택하면 전처리 추천 가이드가 표시됩니다.</div>
+            </div>
+            <button id="contextApplyBestBtn" class="btn primary" type="button" disabled>Apply Best to Analysis Defaults</button>
+            <div class="sep"></div>
+            <div class="section-title">Recent Best / Runs</div>
+            <div id="contextHistory" class="context-history">
+              <div class="notice">No saved context experiments.</div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="tab-panel advanced-tab-panel">
+        <div class="advanced-layout">
+          <section class="card advanced-panel">
+            <div class="section-title">Preset / ROI Test</div>
+            <div class="advanced-grid">
+              <div class="wide"><div class="label">Preset</div><select id="advPresetSelect" class="select"></select></div>
+              <div class="wide"><div class="label">Preset Name</div><input id="advPresetName" class="input" value="None"></div>
+            </div>
+            <div class="preset-actions">
+              <button id="advPresetNewBtn" class="btn" type="button">New</button>
+              <button id="advPresetDuplicateBtn" class="btn" type="button">Duplicate</button>
+              <button id="advPresetSaveBtn" class="btn primary" type="button">Save Preset</button>
+              <button id="advPresetDeleteBtn" class="btn" type="button">Delete</button>
+            </div>
+            <div class="sep"></div>
+            <div class="section-title">Manual ROI Picker</div>
+            <div id="advancedRoiStage" class="roi-stage">
+              <img id="advancedRoiImage" alt="Advanced block ROI source image">
+              <div id="advancedRoiBox" class="roi-box"></div>
+            </div>
+            <div class="context-actions">
+              <button id="advancedLoadTestImageBtn" class="btn primary" type="button">Load Test Image</button>
+              <button id="advancedUseContextImageBtn" class="btn" type="button">Use Context Image</button>
+              <button id="advancedUseSelectedSegmentBtn" class="btn" type="button">Use Segment</button>
+            </div>
+            <div id="advancedTestStatus" class="notice">Load an image, drag ROI if needed, then run a block test.</div>
+            <button id="advancedRunBlockTestBtn" class="btn primary" type="button">Run Block Test</button>
+            <div class="advanced-test-grid">
+              <div><div class="label">Source</div><img id="advancedSourceImage" alt="Advanced block source preview"></div>
+              <div><div class="label">Processed</div><img id="advancedProcessedImage" alt="Advanced block processed preview"></div>
+            </div>
+            <pre id="advancedTestHints" class="advanced-test-log">No block test result.</pre>
+          </section>
+
+          <section class="card advanced-panel">
+            <div class="section-title">YOLO Detection Block</div>
+            <div class="advanced-switches">
+              <label><input id="advYoloEnabled" type="checkbox"> Enable YOLO</label>
+              <label><input id="advYoloUseBoxesAsRoi" type="checkbox"> Boxes as ROI</label>
+              <label><input id="advYoloDrawOverlay" type="checkbox"> Draw Overlay</label>
+            </div>
+            <div class="advanced-grid">
+              <div class="wide"><div class="label">Model Path</div><input id="advYoloModelPath" class="input" placeholder="models/yolo/yolo11n.onnx"></div>
+              <div><div class="label">Runtime</div><select id="advYoloRuntime" class="select"><option value="onnxruntime">ONNX Runtime</option><option value="openvino">OpenVINO</option><option value="tensorrt">TensorRT</option><option value="future">Future</option></select></div>
+              <div><div class="label">Device</div><select id="advYoloDevice" class="select"><option value="cpu">CPU</option><option value="cuda">CUDA</option><option value="auto">Auto</option></select></div>
+              <div><div class="label">Input Size</div><select id="advYoloInputSize" class="select"><option value="416">416</option><option value="512">512</option><option value="640">640</option><option value="768">768</option></select></div>
+              <div><div class="label">Confidence</div><input id="advYoloConfidence" class="input" type="number" min="0.05" max="0.95" step="0.05" value="0.45"></div>
+              <div><div class="label">IoU</div><input id="advYoloIou" class="input" type="number" min="0.05" max="0.95" step="0.05" value="0.50"></div>
+              <div class="wide"><div class="label">Target Labels</div><input id="advYoloLabels" class="input" value="worker,hand,part,fixture,button,tool,machine"></div>
+            </div>
+            <div class="notice">현재는 설정값과 hint만 VLM Trace에 반영됩니다. 실제 YOLO 엔진은 이후 Detection Block에 연결합니다.</div>
+          </section>
+
+          <section class="card advanced-panel">
+            <div class="section-title">ROI / Crop Block</div>
+            <div class="advanced-grid">
+              <div><div class="label">ROI Mode</div><select id="advRoiMode" class="select"><option value="fullFrame">Full Frame</option><option value="manualRoi">Manual ROI</option><option value="motionRoi">Motion ROI</option><option value="futureYoloRoi">YOLO ROI</option></select></div>
+              <div><div class="label">ROI Padding</div><input id="advRoiPadding" class="input" type="number" min="0" max="1" step="0.01" value="0.12"></div>
+              <div><div class="label">X</div><input id="advRoiX" class="input" type="number" min="0" step="1" value="0"></div>
+              <div><div class="label">Y</div><input id="advRoiY" class="input" type="number" min="0" step="1" value="0"></div>
+              <div><div class="label">Width</div><input id="advRoiWidth" class="input" type="number" min="0" step="1" value="0"></div>
+              <div><div class="label">Height</div><input id="advRoiHeight" class="input" type="number" min="0" step="1" value="0"></div>
+              <div><div class="label">Crop Mode</div><select id="advCropMode" class="select"><option value="fullFrame">Full Frame</option><option value="roiContext">ROI + Context</option><option value="tightCrop">Tight Crop</option><option value="none">None</option></select></div>
+              <div><div class="label">Crop Padding</div><input id="advCropPadding" class="input" type="number" min="0" max="1" step="0.01" value="0.12"></div>
+              <div><div class="label">Output Long Edge</div><select id="advCropOutputLongEdge" class="select"><option value="512">512</option><option value="640">640</option><option value="768">768</option><option value="896">896</option><option value="1024">1024</option></select></div>
+              <div class="advanced-switches"><label><input id="advCropKeepAspect" type="checkbox" checked> Keep Aspect</label></div>
+            </div>
+            <div class="notice">Manual ROI 좌표는 향후 실제 crop 처리에서 사용됩니다. 현재는 요청 Context와 Trace에 기록됩니다.</div>
+          </section>
+
+          <section class="card advanced-panel">
+            <div class="section-title">OCR / Sampling Block</div>
+            <div class="advanced-switches">
+              <label><input id="advOcrEnabled" type="checkbox"> Enable OCR</label>
+              <label><input id="advOcrUseTextAsHint" type="checkbox" checked> Text as Hint</label>
+              <label><input id="advSamplingIncludeTimestamp" type="checkbox" checked> Timestamp</label>
+            </div>
+            <div class="advanced-grid">
+              <div><div class="label">OCR Engine</div><select id="advOcrEngine" class="select"><option value="future">Future</option><option value="tesseract">Tesseract</option><option value="paddleocr">PaddleOCR</option></select></div>
+              <div><div class="label">OCR Language</div><select id="advOcrLanguage" class="select"><option value="ko">Korean</option><option value="en">English</option><option value="ko+en">Korean + English</option></select></div>
+              <div><div class="label">Sampling Mode</div><select id="advSamplingMode" class="select"><option value="uniform">Uniform</option><option value="first">First</option><option value="middle">Middle</option><option value="last">Last</option><option value="motionPeak">Motion Peak</option><option value="startEnd">Start + End</option></select></div>
+              <div><div class="label">Frame Count</div><select id="advSamplingFrameCount" class="select"><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="5">5</option><option value="8">8</option></select></div>
+              <div><div class="label">Motion Peak Window</div><input id="advSamplingMotionPeakWindowSec" class="input" type="number" min="0.05" max="2" step="0.05" value="0.25"></div>
+            </div>
+            <div class="advanced-actions">
+              <button id="advancedApplyToCandidatesBtn" class="btn primary" type="button">Use Current Settings in Compare</button>
+              <button id="advancedResetBtn" class="btn" type="button">Reset Advanced</button>
+            </div>
+            <div class="notice">권장 흐름은 Save Preset 후 VLM Context에서 선택하는 방식입니다. 현재 설정을 임시 비교값으로 바로 반영할 수도 있습니다.</div>
           </section>
         </div>
       </section>
@@ -386,6 +576,30 @@
     </form>
   </dialog>
 
+  <dialog id="advancedPresetPickerDialog" class="modal small-modal">
+    <form method="dialog" class="modal-body">
+      <div>
+        <h2>Advanced Preset 선택</h2>
+        <div id="presetPickerTitle" class="help">Compare 후보에 적용할 Advanced Blocks 프리셋을 선택합니다.</div>
+      </div>
+      <section class="card provider">
+        <div class="section-title">Preset</div>
+        <div class="model-grid">
+          <div>
+            <div class="label">Saved Preset</div>
+            <select id="presetPickerSelect" class="select"></select>
+          </div>
+        </div>
+        <div id="presetPickerSummary" class="preset-picker-summary"></div>
+      </section>
+      <div class="actions">
+        <button class="btn" value="cancel">Cancel</button>
+        <button id="editPresetInAdvancedBtn" class="btn" type="button">Advanced Blocks에서 편집</button>
+        <button id="applyPresetToCandidateBtn" class="btn primary" type="button">이 후보에 적용</button>
+      </div>
+    </form>
+  </dialog>
+
   <dialog id="aiTraceDialog" class="modal trace-modal">
     <form method="dialog" class="modal-body">
       <div class="head"><div><h2>AI Trace</h2><div id="traceTitle" class="help">Selected segment request / response trace</div></div><button class="btn" value="cancel">Close</button></div>
@@ -406,6 +620,28 @@
             <button class="btn small-btn trace-tab" type="button" data-trace-tab="mapping">Mapping Log</button>
           </div>
           <pre id="traceText" class="trace-text"></pre>
+        </section>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="contextTraceDialog" class="modal trace-modal">
+    <form method="dialog" class="modal-body">
+      <div class="head"><div><h2>VLM Context Trace</h2><div id="contextTraceTitle" class="help">Context Builder request / response trace</div></div><button class="btn" value="cancel">Close</button></div>
+      <div class="trace-layout">
+        <section class="card provider trace-media-card">
+          <div class="section-title">VLM Input Frames</div>
+          <div id="contextTraceFrames" class="trace-frames"></div>
+        </section>
+        <section class="card provider trace-data-card">
+          <div class="trace-tabs">
+            <button class="btn small-btn context-trace-tab selected" type="button" data-context-trace-tab="prompt">Prompt</button>
+            <button class="btn small-btn context-trace-tab" type="button" data-context-trace-tab="request">Request JSON</button>
+            <button class="btn small-btn context-trace-tab" type="button" data-context-trace-tab="blocks">Block Settings</button>
+            <button class="btn small-btn context-trace-tab" type="button" data-context-trace-tab="raw">Raw Response</button>
+            <button class="btn small-btn context-trace-tab" type="button" data-context-trace-tab="description">Description</button>
+          </div>
+          <pre id="contextTraceText" class="trace-text"></pre>
         </section>
       </div>
     </form>

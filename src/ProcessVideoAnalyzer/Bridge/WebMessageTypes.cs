@@ -42,6 +42,16 @@ public static class WebMessageTypes
     public const string CaptureSnapshot = "captureSnapshot";
     public const string LoadImageForAnalysis = "loadImageForAnalysis";
     public const string GetCaptureStatus = "getCaptureStatus";
+    public const string LoadVlmContextImage = "loadVlmContextImage";
+    public const string RunVlmContextCompare = "runVlmContextCompare";
+    public const string MarkVlmContextBest = "markVlmContextBest";
+    public const string ApplyVlmContextBestToDefaults = "applyVlmContextBestToDefaults";
+    public const string GetVlmContextExperiments = "getVlmContextExperiments";
+    public const string GetAdvancedBlockPresets = "getAdvancedBlockPresets";
+    public const string SaveAdvancedBlockPreset = "saveAdvancedBlockPreset";
+    public const string DeleteAdvancedBlockPreset = "deleteAdvancedBlockPreset";
+    public const string LoadAdvancedBlockTestImage = "loadAdvancedBlockTestImage";
+    public const string RunAdvancedBlockTest = "runAdvancedBlockTest";
 
     public const string VideoLoaded = "videoLoaded";
     public const string ImageLoaded = "imageLoaded";
@@ -62,5 +72,13 @@ public static class WebMessageTypes
     public const string AnalysisHistoryLoaded = "analysisHistoryLoaded";
     public const string CaptureStatus = "captureStatus";
     public const string CapturePreview = "capturePreview";
+    public const string VlmContextImageLoaded = "vlmContextImageLoaded";
+    public const string VlmContextCompareStarted = "vlmContextCompareStarted";
+    public const string VlmContextCompareProgress = "vlmContextCompareProgress";
+    public const string VlmContextCompareComplete = "vlmContextCompareComplete";
+    public const string VlmContextExperimentsUpdated = "vlmContextExperimentsUpdated";
+    public const string AdvancedBlockPresetsUpdated = "advancedBlockPresetsUpdated";
+    public const string AdvancedBlockTestImageLoaded = "advancedBlockTestImageLoaded";
+    public const string AdvancedBlockTestComplete = "advancedBlockTestComplete";
     public const string Error = "error";
 }

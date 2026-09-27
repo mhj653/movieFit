@@ -11,6 +11,7 @@ using ProcessVideoAnalyzer.LocalAI.Core;
 using ProcessVideoAnalyzer.Models;
 using ProcessVideoAnalyzer.Services;
 using ProcessVideoAnalyzer.Video;
+using ProcessVideoAnalyzer.VlmContext;
 using System.Diagnostics;
 
 namespace ProcessVideoAnalyzer;
@@ -34,6 +35,11 @@ public partial class MainWindow : Window
     private readonly VideoAnalysisPipeline _pipeline;
     private readonly CameraCaptureService _captureService;
     private readonly SingleImageFramePreparer _singleImageFramePreparer;
+    private readonly VlmContextExperimentService _contextExperimentService;
+    private readonly VlmContextExperimentStore _contextExperimentStore = new();
+    private readonly VlmContextRecommendationService _contextRecommendationService = new();
+    private readonly VlmContextBlockPresetStore _contextBlockPresetStore = new();
+    private readonly VlmContextBlockTestService _contextBlockTestService = new();
 
     private AnalysisSettings _settings = new();
     private LocalAiSettings _localAiSettings = new();
@@ -43,6 +49,8 @@ public partial class MainWindow : Window
     private readonly Stack<List<ProcessSegment>> _undoStack = new();
     private readonly Stack<List<ProcessSegment>> _redoStack = new();
     private string? _selectedVideoPath;
+    private string? _selectedContextImagePath;
+    private string? _advancedBlockTestImagePath;
     private string? _currentHistoryId;
     private CancellationTokenSource? _analysisCancellation;
 
@@ -53,6 +61,7 @@ public partial class MainWindow : Window
         _videoServer = new LocalVideoServer(_logger);
         _captureService = new CameraCaptureService(_logger);
         _singleImageFramePreparer = new SingleImageFramePreparer();
+        _contextExperimentService = new VlmContextExperimentService(_singleImageFramePreparer);
         _vlmManager = new VlmManager(_localAiStore);
         _localAiSettings = _vlmManager.Settings;
         _pipeline = new VideoAnalysisPipeline(
@@ -87,6 +96,7 @@ public partial class MainWindow : Window
                 await SendLocalAiSettingsAsync();
                 await SendVlmStatusAsync();
                 await SendAnalysisHistoryAsync();
+                await SendAdvancedBlockPresetsAsync();
             };
 
             var webRoot = Path.Combine(AppContext.BaseDirectory, "Web");
@@ -214,6 +224,36 @@ public partial class MainWindow : Window
                     break;
                 case WebMessageTypes.GetCaptureStatus:
                     await SendCaptureStatusAsync();
+                    break;
+                case WebMessageTypes.LoadVlmContextImage:
+                    await LoadVlmContextImageAsync();
+                    break;
+                case WebMessageTypes.RunVlmContextCompare:
+                    await RunVlmContextCompareAsync(message.Data);
+                    break;
+                case WebMessageTypes.MarkVlmContextBest:
+                    await MarkVlmContextBestAsync(message.Data);
+                    break;
+                case WebMessageTypes.ApplyVlmContextBestToDefaults:
+                    await ApplyVlmContextBestToDefaultsAsync(message.Data);
+                    break;
+                case WebMessageTypes.GetVlmContextExperiments:
+                    await SendVlmContextExperimentsAsync();
+                    break;
+                case WebMessageTypes.GetAdvancedBlockPresets:
+                    await SendAdvancedBlockPresetsAsync();
+                    break;
+                case WebMessageTypes.SaveAdvancedBlockPreset:
+                    await SaveAdvancedBlockPresetAsync(message.Data);
+                    break;
+                case WebMessageTypes.DeleteAdvancedBlockPreset:
+                    await DeleteAdvancedBlockPresetAsync(message.Data);
+                    break;
+                case WebMessageTypes.LoadAdvancedBlockTestImage:
+                    await LoadAdvancedBlockTestImageAsync();
+                    break;
+                case WebMessageTypes.RunAdvancedBlockTest:
+                    await RunAdvancedBlockTestAsync(message.Data);
                     break;
             }
         }
@@ -404,6 +444,303 @@ public partial class MainWindow : Window
             "Loaded Image",
             "Loaded still image analyzed by Local VLM.",
             "Analyzing Loaded Image");
+    }
+
+    private async Task LoadVlmContextImageAsync()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Filter = "Image Files|*.jpg;*.jpeg;*.png;*.bmp|All Files|*.*",
+            Title = "Open Image For VLM Context Builder"
+        };
+
+        if (dialog.ShowDialog(this) != true)
+        {
+            return;
+        }
+
+        _selectedContextImagePath = _captureService.ImportImageForAnalysis(dialog.FileName);
+        await SendAsync(WebMessageTypes.VlmContextImageLoaded, new
+        {
+            fileName = Path.GetFileName(_selectedContextImagePath),
+            imageUrl = ToAssetUri(_selectedContextImagePath)
+        });
+    }
+
+    private async Task RunVlmContextCompareAsync(JsonElement data)
+    {
+        ApplyAnalysisOptions(data);
+        if (IsOpenCvOnly(_localAiSettings.DefaultProvider))
+        {
+            await SendErrorAsync("VLM Context Builder는 Local VLM 모델이 필요합니다. Local AI Settings에서 Local VLM을 선택하세요.");
+            return;
+        }
+
+        _analysisCancellation?.Cancel();
+        _analysisCancellation = new CancellationTokenSource();
+
+        await SendAsync(WebMessageTypes.VlmContextCompareStarted, new { });
+        var progress = new Progress<string>(message => _ = SendAsync(WebMessageTypes.VlmContextCompareProgress, new { message }));
+
+        try
+        {
+            var source = ReadString(data, "source") ?? "image";
+            var candidates = ReadVlmContextCandidates(data);
+            var blockSettings = ReadVlmContextBlockSettings(data);
+            List<VlmContextExperimentRun> runs;
+            if (source.Equals("selectedSegment", StringComparison.OrdinalIgnoreCase))
+            {
+                if (_currentResult is null || !TryReadGuid(data, "segmentId", out var segmentId))
+                {
+                    await SendErrorAsync("Analysis에서 Segment를 먼저 선택하세요.");
+                    return;
+                }
+
+                var segment = _currentResult.Segments.FirstOrDefault(x => x.Id == segmentId);
+                if (segment is null)
+                {
+                    await SendErrorAsync("선택한 Segment를 찾을 수 없습니다.");
+                    return;
+                }
+
+                runs = await _contextExperimentService.RunSegmentCompareAsync(
+                    segment,
+                    candidates,
+                    blockSettings,
+                    _settings,
+                    _vlmManager,
+                    _localAiSettings.ActiveModelName,
+                    progress,
+                    _analysisCancellation.Token);
+            }
+            else
+            {
+                if (string.IsNullOrWhiteSpace(_selectedContextImagePath) || !File.Exists(_selectedContextImagePath))
+                {
+                    await SendErrorAsync("VLM Context Builder에서 먼저 이미지를 Load 하세요.");
+                    return;
+                }
+
+                runs = await _contextExperimentService.RunDefaultCompareAsync(
+                    _selectedContextImagePath,
+                    candidates,
+                    blockSettings,
+                    _settings,
+                    _vlmManager,
+                    _localAiSettings.ActiveModelName,
+                    progress,
+                    _analysisCancellation.Token);
+            }
+
+            var storedRuns = _contextExperimentStore.Load();
+            storedRuns.InsertRange(0, runs);
+            _contextExperimentStore.Save(storedRuns);
+
+            await SendAsync(WebMessageTypes.VlmContextCompareComplete, new
+            {
+                runs = runs.Select(ToVlmContextRunDto).ToList(),
+                recommendation = _contextRecommendationService.Build(storedRuns)
+            });
+            await SendVlmContextExperimentsAsync();
+        }
+        catch (OperationCanceledException)
+        {
+            await SendAsync(WebMessageTypes.VlmContextCompareProgress, new { message = "Context compare canceled." });
+        }
+    }
+
+    private async Task MarkVlmContextBestAsync(JsonElement data)
+    {
+        if (!TryReadGuid(data, "runId", out var runId))
+        {
+            return;
+        }
+
+        var runs = _contextExperimentStore.Load();
+        var selected = runs.FirstOrDefault(x => x.Id == runId);
+        if (selected is null)
+        {
+            return;
+        }
+
+        foreach (var run in runs.Where(x => x.ExperimentId == selected.ExperimentId))
+        {
+            run.IsBest = run.Id == runId;
+        }
+
+        _contextExperimentStore.Save(runs);
+        await SendVlmContextExperimentsAsync();
+    }
+
+    private async Task ApplyVlmContextBestToDefaultsAsync(JsonElement data)
+    {
+        if (!TryReadGuid(data, "runId", out var runId))
+        {
+            return;
+        }
+
+        var runs = _contextExperimentStore.Load();
+        var selected = runs.FirstOrDefault(x => x.Id == runId);
+        if (selected is null)
+        {
+            return;
+        }
+
+        _localAiSettings.SingleImageLongEdge = selected.Candidate.ImageLongEdge;
+        _localAiSettings.SingleImageMaxOutputTokens = selected.Candidate.MaxOutputTokens;
+        _localAiSettings.SingleImagePromptMode = selected.Candidate.PromptMode.Equals("fast", StringComparison.OrdinalIgnoreCase)
+            ? "fast"
+            : "balanced";
+        _localAiSettings.ImageLongEdge = selected.Candidate.ImageLongEdge;
+        _localAiSettings.MaxOutputTokens = selected.Candidate.MaxOutputTokens;
+        _localAiSettings.MaxFrames = Math.Clamp(selected.Candidate.FrameCount, 1, 8);
+        ApplyLocalSettingsToAnalysisSettings();
+        await _vlmManager.SaveSettingsAsync(_localAiSettings);
+        await SendLocalAiSettingsAsync();
+        await SendAsync(WebMessageTypes.VlmContextCompareProgress, new
+        {
+            message = $"Applied {selected.Candidate.Name} to Analysis defaults."
+        });
+    }
+
+    private Task SendAdvancedBlockPresetsAsync()
+    {
+        return SendAsync(WebMessageTypes.AdvancedBlockPresetsUpdated, new
+        {
+            presets = _contextBlockPresetStore.Load()
+        });
+    }
+
+    private async Task SaveAdvancedBlockPresetAsync(JsonElement data)
+    {
+        if (data.ValueKind != JsonValueKind.Object ||
+            !data.TryGetProperty("preset", out var json) ||
+            json.ValueKind != JsonValueKind.Object)
+        {
+            return;
+        }
+
+        try
+        {
+            var preset = JsonSerializer.Deserialize<VlmContextBlockPreset>(json.GetRawText(), _jsonOptions);
+            if (preset is null)
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(preset.Name))
+            {
+                preset.Name = "New Preset";
+            }
+
+            _contextBlockPresetStore.Upsert(preset);
+            await SendAdvancedBlockPresetsAsync();
+        }
+        catch (JsonException ex)
+        {
+            _logger.Info($"Advanced block preset could not be parsed: {ex.Message}");
+            await SendErrorAsync("Advanced Block Preset 저장값을 읽을 수 없습니다.");
+        }
+    }
+
+    private async Task DeleteAdvancedBlockPresetAsync(JsonElement data)
+    {
+        var id = ReadString(data, "id");
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return;
+        }
+
+        _contextBlockPresetStore.Delete(id);
+        await SendAdvancedBlockPresetsAsync();
+    }
+
+    private async Task LoadAdvancedBlockTestImageAsync()
+    {
+        var dialog = new OpenFileDialog
+        {
+            Filter = "Image Files|*.jpg;*.jpeg;*.png;*.bmp|All Files|*.*",
+            Title = "Open Image For Advanced Block Test"
+        };
+
+        if (dialog.ShowDialog(this) != true)
+        {
+            return;
+        }
+
+        _advancedBlockTestImagePath = _captureService.ImportImageForAnalysis(dialog.FileName);
+        await SendAsync(WebMessageTypes.AdvancedBlockTestImageLoaded, new
+        {
+            fileName = Path.GetFileName(_advancedBlockTestImagePath),
+            imageUrl = ToAssetUri(_advancedBlockTestImagePath),
+            source = "advancedImage"
+        });
+    }
+
+    private async Task RunAdvancedBlockTestAsync(JsonElement data)
+    {
+        var source = ReadString(data, "source") ?? "advancedImage";
+        var blockSettings = ReadVlmContextBlockSettings(data);
+        var imagePath = ResolveAdvancedBlockTestSource(source, data);
+        if (string.IsNullOrWhiteSpace(imagePath) || !File.Exists(imagePath))
+        {
+            await SendErrorAsync("Advanced Block Test에 사용할 이미지가 없습니다. 이미지를 Load 하거나 Segment를 선택하세요.");
+            return;
+        }
+
+        var result = _contextBlockTestService.Run(imagePath, blockSettings);
+        await SendAsync(WebMessageTypes.AdvancedBlockTestComplete, new
+        {
+            source,
+            sourceFileName = Path.GetFileName(result.SourcePath),
+            sourceUrl = ToAssetUri(result.SourcePath),
+            processedFileName = Path.GetFileName(result.ProcessedPath),
+            processedUrl = ToAssetUri(result.ProcessedPath),
+            result.SourceWidth,
+            result.SourceHeight,
+            result.OutputWidth,
+            result.OutputHeight,
+            result.LatencyMs,
+            result.Hints,
+            result.Settings
+        });
+    }
+
+    private string? ResolveAdvancedBlockTestSource(string source, JsonElement data)
+    {
+        if (source.Equals("contextImage", StringComparison.OrdinalIgnoreCase))
+        {
+            return _selectedContextImagePath;
+        }
+
+        if (source.Equals("selectedSegment", StringComparison.OrdinalIgnoreCase))
+        {
+            ProcessSegment? segment = null;
+            if (_currentResult is not null && TryReadGuid(data, "segmentId", out var segmentId))
+            {
+                segment = _currentResult.Segments.FirstOrDefault(x => x.Id == segmentId);
+            }
+
+            segment ??= _currentResult?.Segments.FirstOrDefault();
+            return ResolveSegmentPreviewPath(segment);
+        }
+
+        return _advancedBlockTestImagePath;
+    }
+
+    private static string? ResolveSegmentPreviewPath(ProcessSegment? segment)
+    {
+        if (segment is null)
+        {
+            return null;
+        }
+
+        if (!string.IsNullOrWhiteSpace(segment.ThumbnailPath) && File.Exists(segment.ThumbnailPath))
+        {
+            return segment.ThumbnailPath;
+        }
+
+        return segment.FramePaths.FirstOrDefault(File.Exists);
     }
 
     private async Task AnalyzeSingleImageAsync(
@@ -905,6 +1242,16 @@ public partial class MainWindow : Window
         });
     }
 
+    private Task SendVlmContextExperimentsAsync()
+    {
+        var runs = _contextExperimentStore.Load();
+        return SendAsync(WebMessageTypes.VlmContextExperimentsUpdated, new
+        {
+            runs = runs.Take(30).Select(ToVlmContextRunDto).ToList(),
+            recommendation = _contextRecommendationService.Build(runs)
+        });
+    }
+
     private async Task SendLocalAiSettingsAsync()
     {
         var status = await _vlmManager.GetStatusAsync();
@@ -1048,6 +1395,31 @@ public partial class MainWindow : Window
             segment.Alternatives,
             segment.UserEdited,
             needsReview = segment.Confidence > 0 && segment.Confidence < _settings.ConfidenceThreshold
+        };
+    }
+
+    private object ToVlmContextRunDto(VlmContextExperimentRun run)
+    {
+        return new
+        {
+            run.Id,
+            run.ExperimentId,
+            run.CreatedAt,
+            run.InputFileName,
+            run.InputType,
+            run.InputLabel,
+            run.ModelName,
+            run.Candidate,
+            run.Description,
+            run.LatencyMs,
+            run.PreprocessMs,
+            run.VlmMs,
+            run.IsBest,
+            run.Prompt,
+            run.RequestJson,
+            run.RawResponse,
+            run.BlockSettings,
+            frameUrls = run.FramePaths.Select(ToAssetUri).ToList()
         };
     }
 
@@ -1320,6 +1692,47 @@ public partial class MainWindow : Window
             .Select(x => Guid.TryParse(x.GetString(), out var id) ? id : Guid.Empty)
             .Where(x => x != Guid.Empty)
             .ToList();
+    }
+
+    private List<VlmContextCandidate>? ReadVlmContextCandidates(JsonElement data)
+    {
+        if (data.ValueKind != JsonValueKind.Object ||
+            !data.TryGetProperty("candidates", out var json) ||
+            json.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<List<VlmContextCandidate>>(json.GetRawText(), _jsonOptions);
+        }
+        catch (JsonException ex)
+        {
+            _logger.Info($"VLM context candidates could not be parsed: {ex.Message}");
+            return null;
+        }
+    }
+
+    private VlmContextBlockSettings ReadVlmContextBlockSettings(JsonElement data)
+    {
+        if (data.ValueKind != JsonValueKind.Object ||
+            !data.TryGetProperty("blockSettings", out var json) ||
+            json.ValueKind != JsonValueKind.Object)
+        {
+            return new VlmContextBlockSettings();
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<VlmContextBlockSettings>(json.GetRawText(), _jsonOptions)
+                   ?? new VlmContextBlockSettings();
+        }
+        catch (JsonException ex)
+        {
+            _logger.Info($"VLM context block settings could not be parsed: {ex.Message}");
+            return new VlmContextBlockSettings();
+        }
     }
 
     private static object ToVlmModelDto(VlmModelProfile model)
