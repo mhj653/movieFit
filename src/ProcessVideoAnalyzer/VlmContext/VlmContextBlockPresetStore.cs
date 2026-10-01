@@ -31,7 +31,30 @@ public sealed class VlmContextBlockPresetStore
             var json = File.ReadAllText(_storePath);
             var items = JsonSerializer.Deserialize<List<VlmContextBlockPreset>>(json, _jsonOptions)
                         ?? new List<VlmContextBlockPreset>();
-            return items.Count == 0 ? DefaultPresets() : items;
+            if (items.Count == 0)
+            {
+                return DefaultPresets();
+            }
+
+            foreach (var item in items)
+            {
+                item.Recipe ??= VlmContextRecipeFactory.FromLegacySettings(new VlmContextCandidate
+                {
+                    Name = item.Name,
+                    AdvancedPresetId = item.Id,
+                    AdvancedPresetName = item.Name,
+                    ImageLongEdge = item.Settings.CropOutputLongEdge,
+                    FrameCount = item.Settings.SamplingFrameCount,
+                    SamplingMode = item.Settings.SamplingMode,
+                    YoloHints = item.Settings.YoloEnabled,
+                    OcrHints = item.Settings.OcrEnabled,
+                    RoiMode = item.Settings.RoiMode,
+                    CropMode = item.Settings.CropMode,
+                    TargetLabels = item.Settings.YoloLabels
+                }, item.Settings);
+            }
+
+            return items;
         }
         catch
         {
@@ -53,6 +76,21 @@ public sealed class VlmContextBlockPresetStore
         }
 
         var index = presets.FindIndex(x => x.Id.Equals(preset.Id, StringComparison.OrdinalIgnoreCase));
+        preset.Recipe ??= VlmContextRecipeFactory.FromLegacySettings(new VlmContextCandidate
+        {
+            Name = preset.Name,
+            AdvancedPresetId = preset.Id,
+            AdvancedPresetName = preset.Name,
+            ImageLongEdge = preset.Settings.CropOutputLongEdge,
+            FrameCount = preset.Settings.SamplingFrameCount,
+            SamplingMode = preset.Settings.SamplingMode,
+            YoloHints = preset.Settings.YoloEnabled,
+            OcrHints = preset.Settings.OcrEnabled,
+            RoiMode = preset.Settings.RoiMode,
+            CropMode = preset.Settings.CropMode,
+            TargetLabels = preset.Settings.YoloLabels
+        }, preset.Settings);
+        preset.Settings = VlmContextRecipeFactory.ToLegacySettings(preset.Recipe, preset.Settings);
         preset.UpdatedAt = DateTimeOffset.Now;
         if (index >= 0)
         {
@@ -84,7 +122,7 @@ public sealed class VlmContextBlockPresetStore
 
     private static List<VlmContextBlockPreset> DefaultPresets()
     {
-        return new List<VlmContextBlockPreset>
+        var presets = new List<VlmContextBlockPreset>
         {
             new()
             {
@@ -122,5 +160,24 @@ public sealed class VlmContextBlockPresetStore
                 }
             }
         };
+        foreach (var preset in presets)
+        {
+            preset.Recipe = VlmContextRecipeFactory.FromLegacySettings(new VlmContextCandidate
+            {
+                Name = preset.Name,
+                AdvancedPresetId = preset.Id,
+                AdvancedPresetName = preset.Name,
+                ImageLongEdge = preset.Settings.CropOutputLongEdge,
+                FrameCount = preset.Settings.SamplingFrameCount,
+                SamplingMode = preset.Settings.SamplingMode,
+                YoloHints = preset.Settings.YoloEnabled,
+                OcrHints = preset.Settings.OcrEnabled,
+                RoiMode = preset.Settings.RoiMode,
+                CropMode = preset.Settings.CropMode,
+                TargetLabels = preset.Settings.YoloLabels
+            }, preset.Settings);
+        }
+
+        return presets;
     }
 }

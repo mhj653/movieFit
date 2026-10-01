@@ -1,14 +1,14 @@
-ProcessVideoAnalyzer Release Package
+ProcessVideoAnalyzer v0.2.1 Release Package
 
 실행 방법
-1. GitHub Release에서 아래 분할 파일을 모두 같은 폴더에 내려받습니다.
-   - ProcessVideoAnalyzer-v0.2.0-win-x64.tar.part01
-   - ProcessVideoAnalyzer-v0.2.0-win-x64.tar.part02
-   - ProcessVideoAnalyzer-v0.2.0-win-x64.tar.part03
+1. GitHub Release에서 아래 분할 파일을 모두 같은 폴더에 다운로드합니다.
+   - ProcessVideoAnalyzer-v0.2.1-win-x64.tar.part01
+   - ProcessVideoAnalyzer-v0.2.1-win-x64.tar.part02
+   - ProcessVideoAnalyzer-v0.2.1-win-x64.tar.part03
 2. Windows 명령 프롬프트에서 아래 명령으로 원본 tar 파일을 복원합니다.
-   copy /b ProcessVideoAnalyzer-v0.2.0-win-x64.tar.part01+ProcessVideoAnalyzer-v0.2.0-win-x64.tar.part02+ProcessVideoAnalyzer-v0.2.0-win-x64.tar.part03 ProcessVideoAnalyzer-v0.2.0-win-x64.tar
+   copy /b ProcessVideoAnalyzer-v0.2.1-win-x64.tar.part01+ProcessVideoAnalyzer-v0.2.1-win-x64.tar.part02+ProcessVideoAnalyzer-v0.2.1-win-x64.tar.part03 ProcessVideoAnalyzer-v0.2.1-win-x64.tar
 3. 복원한 tar 파일을 압축 해제합니다.
-   tar -xf ProcessVideoAnalyzer-v0.2.0-win-x64.tar
+   tar -xf ProcessVideoAnalyzer-v0.2.1-win-x64.tar
 4. 압축 해제된 폴더에서 ProcessVideoAnalyzer.exe를 실행합니다.
 
 체크섬 확인
@@ -17,4 +17,5 @@ ProcessVideoAnalyzer Release Package
 빌드 기준
 - .NET 8
 - Windows x64
-- Local VLM / VLM Context Builder / Advanced Blocks 포함
+- Local VLM 모델 포함
+- VLM Context Builder / Advanced Blocks Step Pipeline 포함

@@ -8,6 +8,7 @@ public sealed class VlmContextCandidate
     public string AdvancedPresetId { get; init; } = "none";
     public string AdvancedPresetName { get; init; } = "None";
     public VlmContextBlockSettings? BlockSettings { get; init; }
+    public Steps.VlmContextRecipe? Recipe { get; init; }
     public int ImageLongEdge { get; init; }
     public int FrameCount { get; init; } = 1;
     public bool MotionSummary { get; init; }

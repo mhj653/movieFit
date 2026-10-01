@@ -47,6 +47,7 @@ public static class WebMessageTypes
     public const string MarkVlmContextBest = "markVlmContextBest";
     public const string ApplyVlmContextBestToDefaults = "applyVlmContextBestToDefaults";
     public const string GetVlmContextExperiments = "getVlmContextExperiments";
+    public const string GetVlmContextStepLibrary = "getVlmContextStepLibrary";
     public const string GetAdvancedBlockPresets = "getAdvancedBlockPresets";
     public const string SaveAdvancedBlockPreset = "saveAdvancedBlockPreset";
     public const string DeleteAdvancedBlockPreset = "deleteAdvancedBlockPreset";
@@ -77,6 +78,7 @@ public static class WebMessageTypes
     public const string VlmContextCompareProgress = "vlmContextCompareProgress";
     public const string VlmContextCompareComplete = "vlmContextCompareComplete";
     public const string VlmContextExperimentsUpdated = "vlmContextExperimentsUpdated";
+    public const string VlmContextStepLibrary = "vlmContextStepLibrary";
     public const string AdvancedBlockPresetsUpdated = "advancedBlockPresetsUpdated";
     public const string AdvancedBlockTestImageLoaded = "advancedBlockTestImageLoaded";
     public const string AdvancedBlockTestComplete = "advancedBlockTestComplete";

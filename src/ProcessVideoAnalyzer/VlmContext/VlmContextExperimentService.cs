@@ -3,16 +3,19 @@ using ProcessVideoAnalyzer.Imaging;
 using ProcessVideoAnalyzer.LocalAI.Core;
 using ProcessVideoAnalyzer.Models;
 using ProcessVideoAnalyzer.Video;
+using ProcessVideoAnalyzer.VlmContext.Steps;
 
 namespace ProcessVideoAnalyzer.VlmContext;
 
 public sealed class VlmContextExperimentService
 {
     private readonly SingleImageFramePreparer _framePreparer;
+    private readonly VlmContextStepRunner _stepRunner;
 
     public VlmContextExperimentService(SingleImageFramePreparer framePreparer)
     {
         _framePreparer = framePreparer;
+        _stepRunner = new VlmContextStepRunner(framePreparer);
     }
 
     public async Task<List<VlmContextExperimentRun>> RunDefaultCompareAsync(
@@ -112,11 +115,18 @@ public sealed class VlmContextExperimentService
         var effectiveBlockSettings = candidate.BlockSettings ?? blockSettings;
         var totalWatch = Stopwatch.StartNew();
         var preprocessWatch = Stopwatch.StartNew();
-        var selectedFrames = SelectFrames(sourceFramePaths, candidate.FrameCount, candidate.SamplingMode);
-        var preparedFrames = selectedFrames
-            .Select(path => _framePreparer.Prepare(path, candidate.ImageLongEdge))
-            .Where(File.Exists)
-            .ToList();
+        var recipe = candidate.Recipe ?? VlmContextRecipeFactory.FromLegacySettings(candidate, effectiveBlockSettings);
+        var pipelineResult = await _stepRunner.RunAsync(new VlmContextPipelineInput
+        {
+            SourceFramePaths = sourceFramePaths,
+            InputType = inputType,
+            SourceSegment = sourceSegment,
+            Candidate = candidate,
+            BlockSettings = effectiveBlockSettings,
+            Recipe = recipe
+        }, cancellationToken);
+        var selectedFrames = pipelineResult.SelectedFramePaths;
+        var preparedFrames = pipelineResult.PreparedFramePaths;
         preprocessWatch.Stop();
 
         var segment = new ProcessSegment
@@ -134,13 +144,7 @@ public sealed class VlmContextExperimentService
         };
         VideoAnalysisPipeline.EnsureSchema(segment);
 
-        var detectionFacts = candidate.MotionSummary
-            ? BuildContextHints(inputType, segment, preparedFrames.Count, candidate, effectiveBlockSettings)
-            : "";
-        if (!candidate.MotionSummary)
-        {
-            detectionFacts = BuildOptionalBlockHints(inputType, preparedFrames.Count, candidate, effectiveBlockSettings);
-        }
+        var detectionFacts = pipelineResult.ContextText;
 
         var vlmWatch = Stopwatch.StartNew();
         var result = await vlmManager.AnalyzeAsync(new VlmRequest
@@ -177,6 +181,8 @@ public sealed class VlmContextExperimentService
             RequestJson = result.TraceRequestJson,
             RawResponse = result.TraceRawResponse,
             BlockSettings = effectiveBlockSettings,
+            Recipe = recipe,
+            StepTraces = pipelineResult.StepTraces,
             FramePaths = result.TraceFramePaths
         };
     }
@@ -210,6 +216,7 @@ public sealed class VlmContextExperimentService
             AdvancedPresetId = string.IsNullOrWhiteSpace(candidate.AdvancedPresetId) ? "none" : candidate.AdvancedPresetId.Trim(),
             AdvancedPresetName = string.IsNullOrWhiteSpace(candidate.AdvancedPresetName) ? "None" : candidate.AdvancedPresetName.Trim(),
             BlockSettings = candidate.BlockSettings,
+            Recipe = candidate.Recipe,
             ImageLongEdge = Math.Clamp(candidate.ImageLongEdge <= 0 ? 768 : candidate.ImageLongEdge, 160, 1280),
             FrameCount = Math.Clamp(candidate.FrameCount <= 0 ? 1 : candidate.FrameCount, 1, 8),
             MotionSummary = candidate.MotionSummary,

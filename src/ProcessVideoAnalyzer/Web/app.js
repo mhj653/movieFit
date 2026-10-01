@@ -47,6 +47,9 @@
     segmentId: "",
     candidates: defaultContextCandidates("image"),
     blockSettings: defaultAdvancedBlockSettings(),
+    recipe: null,
+    selectedRecipeStepIndex: 0,
+    stepLibrary: [],
     advancedPresets: [],
     activeAdvancedPresetId: "none",
     advancedTestSource: "advancedImage",
@@ -183,6 +186,17 @@ const el = {
   advPresetDuplicateBtn: document.getElementById("advPresetDuplicateBtn"),
   advPresetSaveBtn: document.getElementById("advPresetSaveBtn"),
   advPresetDeleteBtn: document.getElementById("advPresetDeleteBtn"),
+  recipeDefaultImageSize: document.getElementById("recipeDefaultImageSize"),
+  recipeDefaultFrameCount: document.getElementById("recipeDefaultFrameCount"),
+  recipeDefaultSamplingMode: document.getElementById("recipeDefaultSamplingMode"),
+  recipeDefaultPromptMode: document.getElementById("recipeDefaultPromptMode"),
+  recipeDefaultTokens: document.getElementById("recipeDefaultTokens"),
+  recipeDefaultLanguage: document.getElementById("recipeDefaultLanguage"),
+  stepLibraryCount: document.getElementById("stepLibraryCount"),
+  stepLibraryList: document.getElementById("stepLibraryList"),
+  recipeStepList: document.getElementById("recipeStepList"),
+  recipeStepSettings: document.getElementById("recipeStepSettings"),
+  recipeResetStepsBtn: document.getElementById("recipeResetStepsBtn"),
   advancedRoiStage: document.getElementById("advancedRoiStage"),
   advancedRoiImage: document.getElementById("advancedRoiImage"),
   advancedRoiBox: document.getElementById("advancedRoiBox"),
@@ -209,6 +223,7 @@ post("getLocalAiSettings");
 post("getVlmStatus");
 post("getCaptureStatus");
 post("getVlmContextExperiments");
+post("getVlmContextStepLibrary");
 post("getAdvancedBlockPresets");
 setInterval(() => post("getCaptureStatus"), 750);
 
@@ -333,22 +348,37 @@ function wireUi() {
   });
   el.advancedApplyToCandidatesBtn?.addEventListener("click", () => {
     applyAdvancedToCandidates();
-    if (!event.silent) {
-      renderContextCandidateSetup();
-    }
+    renderContextCandidateSetup();
     showToast("Advanced block settings applied to Compare Setup");
   });
   el.advancedResetBtn?.addEventListener("click", () => {
     state.context.blockSettings = defaultAdvancedBlockSettings();
+    state.context.recipe = defaultRecipeFromSettings(state.context.blockSettings, el.advPresetName?.value || "Current Recipe");
+    state.context.selectedRecipeStepIndex = 0;
     fillAdvancedBlockSettings();
     renderAdvancedPresetSelect();
-    showToast("Advanced block settings reset");
+    renderStepBuilder();
+    showToast("Recipe reset");
   });
   el.advPresetSelect?.addEventListener("change", () => selectAdvancedPreset(el.advPresetSelect.value));
   el.advPresetNewBtn?.addEventListener("click", newAdvancedPreset);
   el.advPresetDuplicateBtn?.addEventListener("click", duplicateAdvancedPreset);
   el.advPresetSaveBtn?.addEventListener("click", saveAdvancedPreset);
   el.advPresetDeleteBtn?.addEventListener("click", deleteAdvancedPreset);
+  [
+    el.recipeDefaultImageSize,
+    el.recipeDefaultFrameCount,
+    el.recipeDefaultSamplingMode,
+    el.recipeDefaultPromptMode,
+    el.recipeDefaultTokens,
+    el.recipeDefaultLanguage
+  ].forEach((control) => control?.addEventListener("change", updateRecipeDefaultsFromUi));
+  el.recipeResetStepsBtn?.addEventListener("click", () => {
+    state.context.recipe = defaultRecipeFromSettings(collectAdvancedBlockSettings(), el.advPresetName?.value || "Current Recipe");
+    state.context.selectedRecipeStepIndex = 0;
+    renderStepBuilder();
+    showToast("Recipe steps reset");
+  });
   el.advancedLoadTestImageBtn?.addEventListener("click", () => post("loadAdvancedBlockTestImage"));
   el.advancedUseContextImageBtn?.addEventListener("click", () => setAdvancedTestSource("contextImage"));
   el.advancedUseSelectedSegmentBtn?.addEventListener("click", () => setAdvancedTestSource("selectedSegment"));
@@ -498,6 +528,10 @@ function wireHost() {
         reconcileContextBestFlags();
         renderContextLab();
         break;
+      case "vlmContextStepLibrary":
+        state.context.stepLibrary = data.steps ?? [];
+        renderStepBuilder();
+        break;
       case "advancedBlockPresetsUpdated":
         state.context.advancedPresets = data.presets ?? [];
         if (!state.context.advancedPresets.length) {
@@ -508,6 +542,7 @@ function wireHost() {
         }
         selectAdvancedPreset(state.context.activeAdvancedPresetId, true);
         renderAdvancedPresetSelect();
+        renderStepBuilder();
         renderContextCandidateSetup();
         break;
       case "advancedBlockTestImageLoaded":
@@ -683,6 +718,9 @@ function fillAdvancedBlockSettings() {
 }
 
 function collectAdvancedBlockSettings() {
+  if (state.context.recipe) {
+    syncLegacyControlsFromRecipe(state.context.recipe);
+  }
   const settings = {
     yoloEnabled: readChecked("advYoloEnabled"),
     yoloModelPath: readValueSetting("advYoloModelPath", ""),
@@ -717,6 +755,359 @@ function collectAdvancedBlockSettings() {
   return settings;
 }
 
+function currentRecipe() {
+  if (!state.context.recipe) {
+    state.context.recipe = defaultRecipeFromSettings(state.context.blockSettings ?? defaultAdvancedBlockSettings(), el.advPresetName?.value || "Current Recipe");
+  }
+  return state.context.recipe;
+}
+
+function defaultRecipeFromSettings(settings = defaultAdvancedBlockSettings(), name = "New Recipe") {
+  const id = `recipe_${Date.now()}`;
+  return {
+    id,
+    name,
+    version: "1.0",
+    defaults: {
+      imageLongEdge: Number(settings.cropOutputLongEdge) || 768,
+      frameCount: Number(settings.samplingFrameCount) || 3,
+      samplingMode: settings.samplingMode || "uniform",
+      promptMode: "description",
+      maxOutputTokens: 120,
+      resultLanguage: state.settings.resultLanguage || "ko",
+      temperature: Number(state.settings.temperature ?? 0.1)
+    },
+    steps: [
+      recipeStep("frames.sampling", "Frame Sampling", { mode: settings.samplingMode || "uniform", frameCount: String(settings.samplingFrameCount || 3) }),
+      recipeStep("vision.roi", "ROI Focus", {
+        mode: settings.roiMode || "fullFrame",
+        x: String(settings.roiX || 0),
+        y: String(settings.roiY || 0),
+        width: String(settings.roiWidth || 0),
+        height: String(settings.roiHeight || 0),
+        padding: String(settings.roiPadding ?? 0.12)
+      }),
+      recipeStep("vision.cropResize", "Crop / Resize", {
+        cropMode: settings.cropMode || "fullFrame",
+        outputLongEdge: String(settings.cropOutputLongEdge || 768),
+        keepAspect: String(settings.cropKeepAspect ?? true),
+        padding: String(settings.cropPadding ?? 0.12)
+      }),
+      recipeStep("vision.yoloHints", "YOLO Hints", {
+        enabled: String(!!settings.yoloEnabled),
+        labels: settings.yoloLabels || "worker,hand,part,fixture,button,tool,machine",
+        confidence: String(settings.yoloConfidence ?? 0.45),
+        runtime: settings.yoloRuntime || "onnxruntime",
+        device: settings.yoloDevice || "cpu"
+      }),
+      recipeStep("vision.ocrHints", "OCR Hints", {
+        enabled: String(!!settings.ocrEnabled),
+        engine: settings.ocrEngine || "future",
+        language: settings.ocrLanguage || "ko",
+        useTextAsHint: String(settings.ocrUseTextAsHint ?? true)
+      }),
+      recipeStep("ai.promptContext", "Prompt Context", { focus: "visible manufacturing action", avoidGenericState: "true" }),
+      recipeStep("ai.localVlmAnalyze", "Local VLM Analyze", { model: "active", maxOutputTokens: "120" }),
+      recipeStep("ai.parseResult", "Parse Result", {})
+    ]
+  };
+}
+
+function recipeStep(type, name, settings = {}) {
+  return {
+    id: `step_${Date.now()}_${Math.random().toString(16).slice(2)}`,
+    type,
+    name,
+    enabled: true,
+    settings: { ...settings }
+  };
+}
+
+function cloneRecipe(recipe) {
+  return JSON.parse(JSON.stringify(recipe ?? defaultRecipeFromSettings()));
+}
+
+function collectAdvancedRecipe() {
+  const recipe = cloneRecipe(currentRecipe());
+  recipe.name = (el.advPresetName?.value || recipe.name || "Recipe").trim();
+  return recipe;
+}
+
+function fillRecipeDefaults(recipe = currentRecipe()) {
+  const defaults = recipe.defaults ?? {};
+  setSelectValue("recipeDefaultImageSize", String(defaults.imageLongEdge || 768));
+  setSelectValue("recipeDefaultFrameCount", String(defaults.frameCount || 3));
+  setSelectValue("recipeDefaultSamplingMode", defaults.samplingMode || "uniform");
+  setSelectValue("recipeDefaultPromptMode", defaults.promptMode || "description");
+  setSelectValue("recipeDefaultTokens", String(defaults.maxOutputTokens || 120));
+  setSelectValue("recipeDefaultLanguage", defaults.resultLanguage || state.settings.resultLanguage || "ko");
+}
+
+function updateRecipeDefaultsFromUi() {
+  const recipe = currentRecipe();
+  recipe.defaults = {
+    ...(recipe.defaults ?? {}),
+    imageLongEdge: readNumberSetting("recipeDefaultImageSize", 768),
+    frameCount: readNumberSetting("recipeDefaultFrameCount", 3),
+    samplingMode: readValueSetting("recipeDefaultSamplingMode", "uniform"),
+    promptMode: readValueSetting("recipeDefaultPromptMode", "description"),
+    maxOutputTokens: readNumberSetting("recipeDefaultTokens", 120),
+    resultLanguage: readValueSetting("recipeDefaultLanguage", state.settings.resultLanguage || "ko"),
+    temperature: Number(state.settings.temperature ?? 0.1)
+  };
+  syncLegacyControlsFromRecipe(recipe);
+  renderStepBuilder();
+}
+
+function renderStepBuilder() {
+  if (!el.stepLibraryList || !el.recipeStepList || !el.recipeStepSettings) return;
+  const recipe = currentRecipe();
+  fillRecipeDefaults(recipe);
+  syncLegacyControlsFromRecipe(recipe);
+  renderStepLibrary();
+  renderRecipeSteps();
+  renderRecipeStepSettings();
+}
+
+function renderStepLibrary() {
+  const library = state.context.stepLibrary ?? [];
+  if (el.stepLibraryCount) el.stepLibraryCount.textContent = String(library.length);
+  if (!el.stepLibraryList) return;
+  if (!library.length) {
+    el.stepLibraryList.innerHTML = `<div class="step-empty">Step Library is loading.</div>`;
+    return;
+  }
+
+  el.stepLibraryList.innerHTML = library.map((step) => `
+    <button class="step-card" type="button" data-add-step-type="${escapeHtml(step.type)}">
+      <b>${escapeHtml(step.name || step.type)}</b>
+      <span>${escapeHtml(step.description || "")}</span>
+      <span class="meta"><i>${escapeHtml(step.category || "Step")}</i><i>${escapeHtml((step.outputs || []).join(", ") || "output")}</i></span>
+    </button>
+  `).join("");
+  el.stepLibraryList.querySelectorAll("[data-add-step-type]").forEach((button) => {
+    button.addEventListener("click", () => addRecipeStep(button.dataset.addStepType || ""));
+  });
+}
+
+function renderRecipeSteps() {
+  const recipe = currentRecipe();
+  const steps = recipe.steps ?? [];
+  if (!steps.length) {
+    el.recipeStepList.innerHTML = `<div class="step-empty">왼쪽 Step Library에서 Step을 추가하세요.</div>`;
+    return;
+  }
+
+  state.context.selectedRecipeStepIndex = Math.max(0, Math.min(state.context.selectedRecipeStepIndex || 0, steps.length - 1));
+  el.recipeStepList.innerHTML = steps.map((step, index) => `
+    <div class="pipeline-step${index === state.context.selectedRecipeStepIndex ? " selected" : ""}${step.enabled === false ? " disabled" : ""}" data-step-index="${index}">
+      <div class="order">${index + 1}</div>
+      <button class="pipeline-step-main" type="button" data-select-step="${index}">
+        <b>${escapeHtml(step.name || step.type)}</b>
+        <span>${escapeHtml(step.type)}</span>
+      </button>
+      <div class="step-tools">
+        <button class="btn" type="button" data-toggle-step="${index}">${step.enabled === false ? "On" : "Off"}</button>
+        <button class="btn" type="button" data-move-step-up="${index}">↑</button>
+        <button class="btn" type="button" data-move-step-down="${index}">↓</button>
+        <button class="btn" type="button" data-delete-step="${index}">×</button>
+      </div>
+    </div>
+  `).join("");
+  el.recipeStepList.querySelectorAll("[data-select-step]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.context.selectedRecipeStepIndex = Number(button.dataset.selectStep) || 0;
+      renderStepBuilder();
+    });
+  });
+  el.recipeStepList.querySelectorAll("[data-toggle-step]").forEach((button) => {
+    button.addEventListener("click", () => toggleRecipeStep(Number(button.dataset.toggleStep)));
+  });
+  el.recipeStepList.querySelectorAll("[data-move-step-up]").forEach((button) => {
+    button.addEventListener("click", () => moveRecipeStep(Number(button.dataset.moveStepUp), -1));
+  });
+  el.recipeStepList.querySelectorAll("[data-move-step-down]").forEach((button) => {
+    button.addEventListener("click", () => moveRecipeStep(Number(button.dataset.moveStepDown), 1));
+  });
+  el.recipeStepList.querySelectorAll("[data-delete-step]").forEach((button) => {
+    button.addEventListener("click", () => deleteRecipeStep(Number(button.dataset.deleteStep)));
+  });
+}
+
+function renderRecipeStepSettings() {
+  const recipe = currentRecipe();
+  const step = recipe.steps?.[state.context.selectedRecipeStepIndex || 0];
+  if (!step) {
+    el.recipeStepSettings.innerHTML = `<div class="step-empty">Pipeline Step을 선택하세요.</div>`;
+    return;
+  }
+
+  const keys = Object.keys(step.settings ?? {});
+  el.recipeStepSettings.innerHTML = `
+    <div><div class="label">Step Name</div><input id="recipeStepNameInput" class="input" value="${escapeHtml(step.name || "")}"></div>
+    <div><div class="label">Step Type</div><div class="value">${escapeHtml(step.type)}</div></div>
+    <label class="preset-select-row"><span><b>Enabled</b><span class="notice">Run pipeline에 포함</span></span><input id="recipeStepEnabledInput" type="checkbox" ${step.enabled === false ? "" : "checked"}></label>
+    ${keys.length ? keys.map((key) => renderStepSettingRow(step, key)).join("") : `<div class="step-empty">이 Step은 별도 설정이 없습니다.</div>`}
+  `;
+  document.getElementById("recipeStepNameInput")?.addEventListener("input", (event) => {
+    step.name = event.target.value;
+    renderRecipeSteps();
+  });
+  document.getElementById("recipeStepEnabledInput")?.addEventListener("change", (event) => {
+    step.enabled = event.target.checked;
+    renderRecipeSteps();
+  });
+  el.recipeStepSettings.querySelectorAll("[data-step-setting]").forEach((control) => {
+    control.addEventListener("input", updateSelectedStepSetting);
+    control.addEventListener("change", updateSelectedStepSetting);
+  });
+}
+
+function renderStepSettingRow(step, key) {
+  const value = step.settings?.[key] ?? "";
+  const lower = key.toLowerCase();
+  if (["enabled", "keepaspect", "usetextashint", "avoidgenericstate"].includes(lower)) {
+    return `<div class="setting-row"><label>${escapeHtml(settingLabel(key))}</label><input data-step-setting="${escapeHtml(key)}" type="checkbox" ${String(value).toLowerCase() === "true" ? "checked" : ""}></div>`;
+  }
+  if (lower.includes("mode")) {
+    return `<div class="setting-row"><label>${escapeHtml(settingLabel(key))}</label><input class="input" data-step-setting="${escapeHtml(key)}" value="${escapeHtml(value)}"></div>`;
+  }
+  if (["x","y","width","height","padding","confidence","framecount","outputlongedge","maxoutputtokens"].includes(lower)) {
+    return `<div class="setting-row"><label>${escapeHtml(settingLabel(key))}</label><input class="input" data-step-setting="${escapeHtml(key)}" type="number" step="0.01" value="${escapeHtml(value)}"></div>`;
+  }
+  return `<div class="setting-row"><label>${escapeHtml(settingLabel(key))}</label><input class="input" data-step-setting="${escapeHtml(key)}" value="${escapeHtml(value)}"></div>`;
+}
+
+function settingLabel(key) {
+  return String(key).replace(/([A-Z])/g, " $1").replace(/^./, (char) => char.toUpperCase());
+}
+
+function updateSelectedStepSetting(event) {
+  const recipe = currentRecipe();
+  const step = recipe.steps?.[state.context.selectedRecipeStepIndex || 0];
+  if (!step) return;
+  const key = event.target.dataset.stepSetting;
+  if (!key) return;
+  step.settings ??= {};
+  step.settings[key] = event.target.type === "checkbox" ? String(event.target.checked) : event.target.value;
+  syncLegacyControlsFromRecipe(recipe);
+  renderAdvancedRoiBox();
+}
+
+function addRecipeStep(type) {
+  const definition = (state.context.stepLibrary ?? []).find((step) => step.type === type);
+  if (!definition) return;
+  const recipe = currentRecipe();
+  recipe.steps ??= [];
+  recipe.steps.push(recipeStep(definition.type, definition.name, definition.defaultSettings ?? {}));
+  state.context.selectedRecipeStepIndex = recipe.steps.length - 1;
+  renderStepBuilder();
+}
+
+function toggleRecipeStep(index) {
+  const step = currentRecipe().steps?.[index];
+  if (!step) return;
+  step.enabled = step.enabled === false;
+  state.context.selectedRecipeStepIndex = index;
+  renderStepBuilder();
+}
+
+function moveRecipeStep(index, direction) {
+  const steps = currentRecipe().steps ?? [];
+  const target = index + direction;
+  if (index < 0 || target < 0 || index >= steps.length || target >= steps.length) return;
+  const [item] = steps.splice(index, 1);
+  steps.splice(target, 0, item);
+  state.context.selectedRecipeStepIndex = target;
+  renderStepBuilder();
+}
+
+function deleteRecipeStep(index) {
+  const steps = currentRecipe().steps ?? [];
+  if (index < 0 || index >= steps.length) return;
+  steps.splice(index, 1);
+  state.context.selectedRecipeStepIndex = Math.max(0, Math.min(index, steps.length - 1));
+  renderStepBuilder();
+}
+
+function syncLegacyControlsFromRecipe(recipe = currentRecipe()) {
+  const settings = settingsFromRecipe(recipe, state.context.blockSettings ?? defaultAdvancedBlockSettings());
+  state.context.blockSettings = settings;
+  setChecked("advYoloEnabled", settings.yoloEnabled);
+  setInputValue("advYoloModelPath", settings.yoloModelPath);
+  setSelectValue("advYoloRuntime", settings.yoloRuntime);
+  setSelectValue("advYoloDevice", settings.yoloDevice);
+  setSelectValue("advYoloInputSize", String(settings.yoloInputSize));
+  setInputValue("advYoloConfidence", settings.yoloConfidence);
+  setInputValue("advYoloIou", settings.yoloIou);
+  setInputValue("advYoloLabels", settings.yoloLabels);
+  setChecked("advYoloUseBoxesAsRoi", settings.yoloUseBoxesAsRoi);
+  setChecked("advYoloDrawOverlay", settings.yoloDrawOverlay);
+  setSelectValue("advRoiMode", settings.roiMode);
+  setInputValue("advRoiX", settings.roiX);
+  setInputValue("advRoiY", settings.roiY);
+  setInputValue("advRoiWidth", settings.roiWidth);
+  setInputValue("advRoiHeight", settings.roiHeight);
+  setInputValue("advRoiPadding", settings.roiPadding);
+  setSelectValue("advCropMode", settings.cropMode);
+  setInputValue("advCropPadding", settings.cropPadding);
+  setChecked("advCropKeepAspect", settings.cropKeepAspect);
+  setSelectValue("advCropOutputLongEdge", String(settings.cropOutputLongEdge));
+  setChecked("advOcrEnabled", settings.ocrEnabled);
+  setSelectValue("advOcrEngine", settings.ocrEngine);
+  setSelectValue("advOcrLanguage", settings.ocrLanguage);
+  setChecked("advOcrUseTextAsHint", settings.ocrUseTextAsHint);
+  setSelectValue("advSamplingMode", settings.samplingMode);
+  setSelectValue("advSamplingFrameCount", String(settings.samplingFrameCount));
+  setChecked("advSamplingIncludeTimestamp", settings.samplingIncludeTimestamp);
+  setInputValue("advSamplingMotionPeakWindowSec", settings.samplingMotionPeakWindowSec);
+}
+
+function settingsFromRecipe(recipe, fallback = defaultAdvancedBlockSettings()) {
+  const step = (type) => (recipe?.steps ?? []).find((item) => item.type === type);
+  const sampling = step("frames.sampling")?.settings ?? {};
+  const roi = step("vision.roi")?.settings ?? {};
+  const crop = step("vision.cropResize")?.settings ?? {};
+  const yolo = step("vision.yoloHints")?.settings ?? {};
+  const ocr = step("vision.ocrHints")?.settings ?? {};
+  const defaults = recipe?.defaults ?? {};
+  return {
+    ...defaultAdvancedBlockSettings(),
+    ...fallback,
+    yoloEnabled: boolSetting(yolo.enabled, fallback.yoloEnabled),
+    yoloRuntime: yolo.runtime || fallback.yoloRuntime || "onnxruntime",
+    yoloDevice: yolo.device || fallback.yoloDevice || "cpu",
+    yoloConfidence: numberSetting(yolo.confidence, fallback.yoloConfidence ?? 0.45),
+    yoloLabels: yolo.labels || fallback.yoloLabels || "",
+    roiMode: roi.mode || fallback.roiMode || "fullFrame",
+    roiX: numberSetting(roi.x, fallback.roiX || 0),
+    roiY: numberSetting(roi.y, fallback.roiY || 0),
+    roiWidth: numberSetting(roi.width, fallback.roiWidth || 0),
+    roiHeight: numberSetting(roi.height, fallback.roiHeight || 0),
+    roiPadding: numberSetting(roi.padding, fallback.roiPadding ?? 0.12),
+    cropMode: crop.cropMode || fallback.cropMode || "fullFrame",
+    cropPadding: numberSetting(crop.padding, fallback.cropPadding ?? 0.12),
+    cropKeepAspect: boolSetting(crop.keepAspect, fallback.cropKeepAspect ?? true),
+    cropOutputLongEdge: numberSetting(crop.outputLongEdge, defaults.imageLongEdge || fallback.cropOutputLongEdge || 768),
+    ocrEnabled: boolSetting(ocr.enabled, fallback.ocrEnabled),
+    ocrEngine: ocr.engine || fallback.ocrEngine || "future",
+    ocrLanguage: ocr.language || fallback.ocrLanguage || "ko",
+    ocrUseTextAsHint: boolSetting(ocr.useTextAsHint, fallback.ocrUseTextAsHint ?? true),
+    samplingMode: sampling.mode || defaults.samplingMode || fallback.samplingMode || "uniform",
+    samplingFrameCount: numberSetting(sampling.frameCount, defaults.frameCount || fallback.samplingFrameCount || 3)
+  };
+}
+
+function boolSetting(value, fallback = false) {
+  if (value === undefined || value === null || value === "") return !!fallback;
+  return String(value).toLowerCase() === "true" || String(value) === "1";
+}
+
+function numberSetting(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
 function renderAdvancedPresetSelect() {
   if (!el.advPresetSelect) return;
   const presets = state.context.advancedPresets?.length
@@ -736,25 +1127,36 @@ function selectAdvancedPreset(id, fill = true) {
   const preset = presets.find((item) => item.id === id) || presets[0];
   if (!preset) return;
   state.context.activeAdvancedPresetId = preset.id;
-  state.context.blockSettings = { ...defaultAdvancedBlockSettings(), ...(preset.settings ?? {}) };
+  state.context.recipe = cloneRecipe(preset.recipe ?? defaultRecipeFromSettings({ ...defaultAdvancedBlockSettings(), ...(preset.settings ?? {}) }, preset.name || "Recipe"));
+  state.context.blockSettings = settingsFromRecipe(state.context.recipe, { ...defaultAdvancedBlockSettings(), ...(preset.settings ?? {}) });
+  state.context.selectedRecipeStepIndex = 0;
   if (fill) fillAdvancedBlockSettings();
   renderAdvancedPresetSelect();
+  renderStepBuilder();
 }
 
 function newAdvancedPreset() {
   state.context.activeAdvancedPresetId = `preset_${Date.now()}`;
   state.context.blockSettings = defaultAdvancedBlockSettings();
+  state.context.recipe = defaultRecipeFromSettings(state.context.blockSettings, "New Preset");
+  state.context.selectedRecipeStepIndex = 0;
   if (el.advPresetName) el.advPresetName.value = "New Preset";
   if (el.advPresetSelect) el.advPresetSelect.value = state.context.activeAdvancedPresetId;
   fillAdvancedBlockSettings();
+  renderStepBuilder();
 }
 
 function duplicateAdvancedPreset() {
   const current = currentAdvancedPreset();
   state.context.activeAdvancedPresetId = `preset_${Date.now()}`;
   state.context.blockSettings = { ...defaultAdvancedBlockSettings(), ...(current?.settings ?? collectAdvancedBlockSettings()) };
+  state.context.recipe = cloneRecipe(current?.recipe ?? currentRecipe());
+  state.context.recipe.id = state.context.activeAdvancedPresetId;
+  state.context.recipe.name = `${current?.name || "Preset"} Copy`;
+  state.context.selectedRecipeStepIndex = 0;
   if (el.advPresetName) el.advPresetName.value = `${current?.name || "Preset"} Copy`;
   fillAdvancedBlockSettings();
+  renderStepBuilder();
 }
 
 function saveAdvancedPreset() {
@@ -767,7 +1169,8 @@ function saveAdvancedPreset() {
     preset: {
       id,
       name,
-      settings: collectAdvancedBlockSettings()
+      settings: collectAdvancedBlockSettings(),
+      recipe: collectAdvancedRecipe()
     }
   });
   showToast("Advanced Block preset saved");
@@ -799,12 +1202,14 @@ function makePresetId(name) {
 
 function applyAdvancedToCandidates() {
   const settings = collectAdvancedBlockSettings();
+  const recipe = collectAdvancedRecipe();
   const preset = currentAdvancedPreset();
   state.context.candidates = (state.context.candidates ?? defaultContextCandidates("image")).map((candidate) => ({
     ...candidate,
     advancedPresetId: preset?.id || state.context.activeAdvancedPresetId || "none",
     advancedPresetName: preset?.name || el.advPresetName?.value || "Current",
     blockSettings: settings,
+    recipe,
     yoloHints: settings.yoloEnabled,
     ocrHints: settings.ocrEnabled,
     yoloConfidence: settings.yoloConfidence,
@@ -1075,6 +1480,7 @@ function updateContextCandidateFromControl(event) {
     candidate.advancedPresetName = preset?.name || "None";
     if (preset?.settings) {
       candidate.blockSettings = { ...defaultAdvancedBlockSettings(), ...preset.settings };
+      candidate.recipe = preset.recipe ?? defaultRecipeFromSettings(candidate.blockSettings, preset.name || "Recipe");
       applyBlockSettingsToCandidate(candidate, candidate.blockSettings);
     }
     renderContextCandidateSetup();
@@ -1097,6 +1503,7 @@ function collectContextCandidates() {
         ...candidate,
         advancedPresetName: presetName(candidate.advancedPresetId),
         blockSettings: settings,
+        recipe: recipeForPreset(candidate.advancedPresetId, candidate.recipe),
         imageLongEdge: Number(candidate.imageLongEdge) || 768,
         frameCount: Number(candidate.frameCount) || 1,
         maxOutputTokens: Number(candidate.maxOutputTokens) || 120,
@@ -1115,6 +1522,11 @@ function blockSettingsForPreset(id, fallback = null, allowCurrent = true) {
   const preset = (state.context.advancedPresets ?? []).find((item) => item.id === id);
   const presetSettings = preset && (preset.id !== "none" || !fallback) ? preset.settings : null;
   return { ...defaultAdvancedBlockSettings(), ...(presetSettings ?? fallback ?? (allowCurrent ? collectAdvancedBlockSettings() : {})) };
+}
+
+function recipeForPreset(id, fallback = null) {
+  const preset = (state.context.advancedPresets ?? []).find((item) => item.id === id);
+  return preset?.recipe ?? fallback ?? null;
 }
 
 function openAdvancedPresetPicker(index) {
@@ -1180,6 +1592,7 @@ function applyPresetToCandidate(index, id) {
   candidate.advancedPresetId = id;
   candidate.advancedPresetName = presetName(id);
   candidate.blockSettings = settings;
+  candidate.recipe = recipeForPreset(id, candidate.recipe);
   applyPresetAdvancedFieldsToCandidate(candidate, settings);
 }
 
@@ -1328,7 +1741,11 @@ function setContextTraceTab(tabName) {
   const values = {
     prompt: run.prompt || "No prompt captured.",
     request: prettyJson(run.requestJson),
-    blocks: prettyJson(run.blockSettings),
+    blocks: prettyJson({
+      blockSettings: run.blockSettings,
+      recipe: run.recipe,
+      stepTraces: run.stepTraces
+    }),
     raw: prettyJson(run.rawResponse),
     description: run.description || "(empty)"
   };

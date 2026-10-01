@@ -7,4 +7,5 @@ public sealed class VlmContextBlockPreset
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.Now;
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.Now;
     public VlmContextBlockSettings Settings { get; set; } = new();
+    public Steps.VlmContextRecipe? Recipe { get; set; }
 }

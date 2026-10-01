@@ -12,6 +12,7 @@ using ProcessVideoAnalyzer.Models;
 using ProcessVideoAnalyzer.Services;
 using ProcessVideoAnalyzer.Video;
 using ProcessVideoAnalyzer.VlmContext;
+using ProcessVideoAnalyzer.VlmContext.Steps;
 using System.Diagnostics;
 
 namespace ProcessVideoAnalyzer;
@@ -97,6 +98,7 @@ public partial class MainWindow : Window
                 await SendVlmStatusAsync();
                 await SendAnalysisHistoryAsync();
                 await SendAdvancedBlockPresetsAsync();
+                await SendVlmContextStepLibraryAsync();
             };
 
             var webRoot = Path.Combine(AppContext.BaseDirectory, "Web");
@@ -239,6 +241,9 @@ public partial class MainWindow : Window
                     break;
                 case WebMessageTypes.GetVlmContextExperiments:
                     await SendVlmContextExperimentsAsync();
+                    break;
+                case WebMessageTypes.GetVlmContextStepLibrary:
+                    await SendVlmContextStepLibraryAsync();
                     break;
                 case WebMessageTypes.GetAdvancedBlockPresets:
                     await SendAdvancedBlockPresetsAsync();
@@ -608,6 +613,14 @@ public partial class MainWindow : Window
         return SendAsync(WebMessageTypes.AdvancedBlockPresetsUpdated, new
         {
             presets = _contextBlockPresetStore.Load()
+        });
+    }
+
+    private Task SendVlmContextStepLibraryAsync()
+    {
+        return SendAsync(WebMessageTypes.VlmContextStepLibrary, new
+        {
+            steps = VlmContextStepRegistry.ListBuiltIns()
         });
     }
 
@@ -1419,6 +1432,8 @@ public partial class MainWindow : Window
             run.RequestJson,
             run.RawResponse,
             run.BlockSettings,
+            run.Recipe,
+            run.StepTraces,
             frameUrls = run.FramePaths.Select(ToAssetUri).ToList()
         };
     }

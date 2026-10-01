@@ -20,5 +20,7 @@ public sealed class VlmContextExperimentRun
     public string RequestJson { get; init; } = "";
     public string RawResponse { get; init; } = "";
     public VlmContextBlockSettings BlockSettings { get; init; } = new();
+    public Steps.VlmContextRecipe? Recipe { get; init; }
+    public List<Steps.VlmContextStepTrace> StepTraces { get; init; } = new();
     public List<string> FramePaths { get; init; } = new();
 }
